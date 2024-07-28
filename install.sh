@@ -63,8 +63,8 @@ pip3 install openpyxl
 
 echo "Cloning vivaxGEN MEA-Pipeline"
 git clone https://github.com/vivaxgen/mea-pipeline.git ${ENVS_DIR}/mea-pipeline
-ln -sr ${ENVS_DIR}/ngs-pipeline/etc/bashrc.d/10-mea-pipeline ${BASHRC_DIR}/
-ln -sr ${ENVS_DIR}/ngs-pipeline/etc/bashrc.d/95-prompt-history ${BASHRC_DIR}/
+ln -sr ${ENVS_DIR}/mea-pipeline/etc/bashrc.d/15-mea-pipeline ${BASHRC_DIR}/
+ln -sr ${ENVS_DIR}/mea-pipeline/etc/bashrc.d/95-prompt-history ${BASHRC_DIR}/
 
 echo
 echo "vivaxGEN MEA-Pipeline has been successfully installed. "
