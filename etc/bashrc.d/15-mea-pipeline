@@ -1,0 +1,19 @@
+# source script, which needs to be sourced after vvg-base is activated
+
+_script="$(readlink -f ${BASH_SOURCE[0]})"
+
+# Delete last component from $_script
+_mydir="$(dirname $_script)"
+
+export MEA_PIPELINE_BASE="$(dirname $(dirname $_mydir))"
+export PATH=${MEA_PIPELINE_BASE}/bin/:${PATH}
+
+PYTHONPATH=${PYTHONPATH:-}
+export PYTHONPATH="${MEA_PIPELINE_BASE}:${PYTHONPATH}"
+
+export MEA_PIPELINE_CMD_MODS=${MEA_PIPELINE_CMD_MODS:-}
+
+# register bash autocomplete
+eval "$(register-python-argcomplete mea-pl)"
+
+# EOF

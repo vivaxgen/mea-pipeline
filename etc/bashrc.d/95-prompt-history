@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+# set prompt and history
+
+
+if [ ! -z ${NGS_PROMPT:-} ]; then
+
+    export PS1="(${NGS_PROMPT}) [\u@\h \W]\$ "
+    export HIST_EXT=${NGS_PROMPT}
+
+fi
+
+# set history
+
+if [ ! -z ${HIST_EXT:-} ]; then
+
+    export HISTFILE=${HOME}/.bash_history.${HIST_EXT}
+
+    export HISTSIZE=20000
+    export HISTFILESIZE=20000
+    history -c; history -r
+
+fi
+
+# EOF
