@@ -39,7 +39,8 @@ def init_argparser():
         "--set-het-to-alt",
         default=False,
         action="store_true",
-        help="set GT to alternate alleles for all het alleles, only correct for biallelic variants",
+        help="set GT to alternate alleles for all het alleles, only correct for "
+        "biallelic variants",
     )
     p.add_argument(
         "--set-het-to-missing",
@@ -57,13 +58,15 @@ def init_argparser():
         "--set-missing-to-alt",
         default=False,
         action="store_true",
-        help="set GT to alternate alleles for all missing alleles, only correct for biallelic variants",
+        help="set GT to alternate alleles for all missing alleles, only correct for "
+        "biallelic variants",
     )
     p.add_argument(
         "--set-missing-to-het",
         default=False,
         action="store_true",
-        help="set GT to het alleles for all missing alleles, only correct for biallelic variants",
+        help="set GT to het alleles for all missing alleles, only correct for "
+        "biallelic variants",
     )
     p.add_argument(
         "--set-id",
