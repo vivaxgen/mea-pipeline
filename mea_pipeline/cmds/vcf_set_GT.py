@@ -17,7 +17,6 @@ def init_argparser():
         "--min-minor-depth",
         default=-1,
         type=int,
-        required=True,
         help="minimum number of either allele reads to be called hets, "
         "MalariaGEN value is 2 [-1]",
     )
@@ -25,9 +24,13 @@ def init_argparser():
         "--min-minor-ratio",
         default=-1,
         type=float,
-        required=True,
         help="minimum ratio of either alleles reads to be called hets, "
         "MalariaGEN value is 0.10 [-1]",
+    )
+    p.add_argument(
+        "--minimum-depth",
+        default=-1,
+        type=int,
     )
     p.add_argument(
         "--set-het-to-ref",
@@ -101,6 +104,7 @@ def vcf_set_GT(args):
         logfile=args.outlog,
         minimum_minor_depth=args.min_minor_depth,
         minimum_minor_ratio=args.min_minor_ratio,
+        minimum_depth=args.minimum_depth,
         set_het_to_ref=args.set_het_to_ref,
         set_het_to_alt=args.set_het_to_alt,
         set_het_to_missing=args.set_het_to_missing,
