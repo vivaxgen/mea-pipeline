@@ -21,6 +21,9 @@ import typing
 L = logging.getLogger(__name__)
 
 
+__DEFAULT_RULE_PATH__ = None
+
+
 def _cout(msg: str):
     print(msg, file=sys.stdout)
 
@@ -35,6 +38,11 @@ def _cexit(msg: str, exit_code: int = 1):
     sys.exit(exit_code)
 
 
+def set_default_rule_path(module: types.ModuleType):
+    global __DEFAULT_RULE_PATH__
+    __DEFAULT_RULE_PATH__ = pathlib.Path(module.__path__[0]) / "rules"
+
+
 def init_argparser(desc: str = "", p: argparse.ArgumentParser | None = None):
     """provide common arguments for snakemake-based cli"""
 
@@ -47,7 +55,8 @@ def init_argparser(desc: str = "", p: argparse.ArgumentParser | None = None):
     )
     p.add_argument("--dryrun", default=False, action="store_true")
     p.add_argument("--showcmds", default=False, action="store_true")
-    p.add_argument("--showconfigfiles", default=False, action="store_true")
+    p.add_argument("-p", "--printshellcmds", default=False, action="store_true")
+    p.add_argument("--show-config-files", default=False, action="store_true")
     p.add_argument("--unlock", default=False, action="store_true")
     p.add_argument("--rerun", default=False, action="store_true")
     p.add_argument(
@@ -71,6 +80,7 @@ def init_argparser(desc: str = "", p: argparse.ArgumentParser | None = None):
 
     # general options
     p.arg_dict["target"] = p.add_argument(
+        "-t",
         "--target",
         default=[],
         action="append",
@@ -88,7 +98,6 @@ def init_argparser(desc: str = "", p: argparse.ArgumentParser | None = None):
         "base environment directory",
     )
     p.add_argument(
-        "-p",
         "--panel",
         default=None,
         help="panel to be used (eg. PANEL -> configs/PANEL.yaml as base config)",
@@ -120,6 +129,11 @@ def check_env(env_name: str):
     return False
 
 
+def setup_config(config):
+    # dummy setup configurator
+    return config
+
+
 class SnakeExecutor(object):
 
     def __init__(
@@ -128,11 +142,16 @@ class SnakeExecutor(object):
         args,
         *,
         # basic configuration
-        setup_config_func: types.Callable[dict],
+        setup_config_func: typing.Callable[
+            [
+                dict,
+            ],
+            dict,
+        ] = setup_config,
         # working directory
         workdir: str | pathlib.Path | None = None,
         # show configuration files in stderr
-        show_configfiles: bool = False,
+        show_config_files: bool = False,
         # environment base dir as root for cascading configuration
         env_basedir: str | pathlib.Path | None = None,
         # module to get the snakemake file from
@@ -143,10 +162,12 @@ class SnakeExecutor(object):
 
         self.args = args
         self.setup_config_func = setup_config_func
-        self.workdir= workdir
-        self.show_configfiles = show_configfiles
+        self.workdir = workdir
+        self.show_config_files = show_config_files or args.show_config_files
         self.env_basedir = env_basedir
         self.from_module = from_module
+
+        set_default_rule_path(self.from_module)
 
         # monkey-patch snakemake cli class
         cli_parse_config = cli.parse_config
@@ -173,7 +194,9 @@ class SnakeExecutor(object):
 
         cwd = self.workdir or pathlib.Path.cwd()
         if not (force or self.args.force) and not cwd.is_relative_to(self.env_basedir):
-            _cexit(f"ERROR: current directory {cwd} is not relative to {self.env_basedir}")
+            _cexit(
+                f"ERROR: current directory {cwd} is not relative to {self.env_basedir}"
+            )
 
         snakefile = snakefile or self.args.snakefile
 
@@ -187,9 +210,10 @@ class SnakeExecutor(object):
 
         configfiles = [pathlib.Path(cf) for cf in reversed(self.args.config)]
 
-        if (no_config_cascade or self.args.no_config_cascade):
+        if no_config_cascade or self.args.no_config_cascade:
             if (configfile := self.env_basedir / "config.yaml").is_file():
                 configfiles.append(configfile)
+            config_dirs = [cwd]
         else:
             L.debug("processing cascading configuration")
             # for each config directory, check config file existence
@@ -220,6 +244,8 @@ class SnakeExecutor(object):
             _cexit(f"ERROR: cannot find any config.yaml in {config_dirs}")
 
         configfiles.reverse()
+        if self.show_config_files:
+            _cerr(f"config_files: {configfiles}")
 
         # setting up profile
 
@@ -229,7 +255,7 @@ class SnakeExecutor(object):
 
         if self.args.nocluster:
             # nocluster means prevent from running using batch/job scheduler
-            self.args.profile = None
+            self.args.profile = "none"
 
         # set targets
         if type(self.args.target) != list:
@@ -240,7 +266,7 @@ class SnakeExecutor(object):
         try:
             # set with --profile first
             if self.args.profile:
-                argv = ["--profile", args.profile]
+                argv = ["--profile", self.args.profile]
             else:
                 argv = []
 
@@ -248,7 +274,9 @@ class SnakeExecutor(object):
             L.debug("parsing snakemake arguments")
             parser, args = cli.parse_args(argv)
 
-            args.snakefile = get_snakefile_path(snakefile, from_module=from_module or self.from_module)
+            args.snakefile = get_snakefile_path(
+                snakefile, from_module=from_module or self.from_module
+            )
 
             # set args further from self.args
             args.configfile = configfiles
@@ -264,7 +292,7 @@ class SnakeExecutor(object):
 
             # running parameters
             args.cores = self.args.j
-            args.printshellcmds = self.args.showcmds
+            args.printshellcmds = self.args.showcmds or self.args.printshellcmds
 
             L.debug("invoking snakemake client")
             start_time = datetime.datetime.now()
@@ -422,10 +450,14 @@ def get_snakefile_path(
     """return real path of  snakefile"""
 
     if is_abs_or_rel_path(filepath):
+        if type(filepath) == str:
+            return pathlib.Path(filepath)
         return filepath
     if from_module is not None:
         snakefile_root = pathlib.Path(from_module.__path__[0]) / "rules"
-    return snakefile_root / filepath
+    if snakefile_root is not None:
+        return snakefile_root / filepath
+    return __DEFAULT_RULE_PATH__ / filepath
 
 
 def is_abs_or_rel_path(filepath: str | pathlib.Path):
