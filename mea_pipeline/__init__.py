@@ -5,7 +5,6 @@ __copyright__ = "(c) 2024, Hidayat Trimarsanto <trimarsanto@gmail.com>"
 __license__ = "MIT"
 
 
-#import .subcommands as subcommands
 from . import subcommands
 
 
@@ -17,7 +16,7 @@ arg_parser = subcommands.arg_parser
 
 
 def setup_config(d={}):
-    d['MEA_PIPELINE_RULEDIR'] = __path__[0] + '/rules'
+    d["MEA_PIPELINE_RULEDIR"] = __path__[0] + "/rules"
     return d
 
 
