@@ -11,42 +11,42 @@ import os
 import logging
 
 # check that we have MEA_PIPELINE_BASE environemt
-if 'MEA_PIPELINE_BASE' not in os.environ:
-    print('ERROR: please set the environment by executing MEA-Pipeline activation script',
-          file=sys.stderr)
+if "MEA_PIPELINE_BASE" not in os.environ:
+    print(
+        "ERROR: please set the environment by executing MEA-Pipeline activation script",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 # prepare logging ahead of everything else
-if (LOGLEVEL := int(os.environ.get('MEA_PIPELINE_LOGLEVEL', 0))) > 0:
-    if (LOGFILE := os.environ.get('MEA_PIPELINE_LOGFILE', '')):
+if (LOGLEVEL := int(os.environ.get("MEA_PIPELINE_LOGLEVEL", 0))) > 0:
+    if LOGFILE := os.environ.get("MEA_PIPELINE_LOGFILE", ""):
         logging.basicConfig(filename=LOGFILE, level=LOGLEVEL)
     else:
         logging.basicConfig(level=LOGLEVEL)
 
 
-from mea_pipeline.subcommands import (_cerr as cerr,
-                                      _cexit as cexit,
-                                      SubCommands)
+from mea_pipeline.subcommands import _cerr as cerr, _cexit as cexit, SubCommands
 import platform
 
 
 def greet():
-    cerr(f'{sys.argv[0].split("/")[-1]} - MEA-Pipeline command line interface\n'
-         f'[https://github.com/vivaxgen/mea-pipeline]')
-    cerr(f'Host: {platform.uname().node}')
+    cerr(
+        f'{sys.argv[0].split("/")[-1]} - MEA-Pipeline command line interface\n'
+        f"[https://github.com/vivaxgen/mea-pipeline]"
+    )
+    cerr(f"Host: {platform.uname().node}")
 
 
 def usage():
-    cexit('  usage:\n'
-          '      mea-pl CMD [ARGS]\n'
-          '  try: mea-pl showcmds')
+    cexit("  usage:\n      mea-pl CMD [ARGS]\n  try: mea-pl showcmds")
 
 
 def main():
 
     cmds = SubCommands(
-        modules=['mea_pipeline.cmds'],
-        module_env='MEA_PIPELINE_CMD_MODS',
+        modules=["mea_pipeline.cmds"],
+        module_env="MEA_PIPELINE_CMD_MODS",
         env_takes_precedence=True,
         allow_any_script=True,
         allow_shell=True,
@@ -57,7 +57,7 @@ def main():
     cmds.main()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
 # EOF
