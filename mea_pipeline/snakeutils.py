@@ -3,14 +3,15 @@
 
 __copyright__ = "(c) 2024, Hidayat Trimarsanto <trimarsanto@gmail.com>"
 __license__ = "MIT"
-__version__ = "2024.07.25.01"
+__version__ = "2024.08.09.01"
 
-# this module provides wrapper to execute Snakemake file from Python
+# this module provides wrapper to execute Snakemake file from Python code
 
 
 import os
 import sys
 import pathlib
+import time
 import datetime
 import logging
 import argparse
@@ -53,12 +54,40 @@ def init_argparser(desc: str = "", p: argparse.ArgumentParser | None = None):
     p.add_argument(
         "-j", type=int, default=32, help="number of jobs to be executed in parallel"
     )
-    p.add_argument("--dryrun", default=False, action="store_true")
-    p.add_argument("--showcmds", default=False, action="store_true")
-    p.add_argument("-p", "--printshellcmds", default=False, action="store_true")
-    p.add_argument("--show-config-files", default=False, action="store_true")
-    p.add_argument("--unlock", default=False, action="store_true")
-    p.add_argument("--rerun", default=False, action="store_true")
+    p.add_argument(
+        "--dryrun", default=False, action="store_true", help="run in dry-mode"
+    )
+    p.add_argument(
+        "--showcmds",
+        default=False,
+        action="store_true",
+        help="show shell commands, similar to --printshellcmds",
+    )
+    p.add_argument(
+        "-p",
+        "--printshellcmds",
+        default=False,
+        action="store_true",
+        help="show shell commands",
+    )
+    p.add_argument(
+        "--show-config-files",
+        default=False,
+        action="store_true",
+        help="show the order of config files to parse",
+    )
+    p.add_argument(
+        "--unlock",
+        default=False,
+        action="store_true",
+        help="unlock the directory from unfinished/failed snakemake run",
+    )
+    p.add_argument(
+        "--rerun",
+        default=False,
+        action="store_true",
+        help="continue running the snakemake workflow from previoius point",
+    )
     p.add_argument(
         "--touch",
         default=False,
@@ -150,12 +179,15 @@ class SnakeExecutor(object):
         ] = setup_config,
         # working directory
         workdir: str | pathlib.Path | None = None,
-        # show configuration files in stderr
+        # show configuration files in the parsing order to stderr
         show_config_files: bool = False,
         # environment base dir as root for cascading configuration
         env_basedir: str | pathlib.Path | None = None,
         # module to get the snakemake file from
         from_module: types.ModuleType | None = None,
+        # default configuration file (eg from software installation)
+        # if exists, this would be added as the first configuration file to parse
+        default_config_file: str | pathlib.Path | None = None,
     ):
 
         from snakemake import cli
@@ -166,6 +198,7 @@ class SnakeExecutor(object):
         self.show_config_files = show_config_files or args.show_config_files
         self.env_basedir = env_basedir
         self.from_module = from_module
+        self.default_config_file = default_config_file
 
         set_default_rule_path(self.from_module)
 
@@ -182,11 +215,15 @@ class SnakeExecutor(object):
 
     def run(
         self,
+        # snakefile to run
         snakefile: str | pathlib.Path | None = None,
+        # configuration to append/update
         config: dict = {},
         *,
         from_module: types.ModuleType | None = None,
+        # allow to run the snakefile even if not inside environment directory
         force: bool = False,
+        # prevent from performing cascading configuration parsing
         no_config_cascade: bool = False,
     ):
 
@@ -240,6 +277,11 @@ class SnakeExecutor(object):
         if (root_configfile := self.env_basedir / "configs" / "config.yaml").is_file():
             configfiles.append(root_configfile)
 
+        # if provided, this will be the default config file that comes with
+        # the software/tool installation
+        if self.default_config_file:
+            configfiles.append(self.default_config_file)
+
         if not any(configfiles):
             _cexit(f"ERROR: cannot find any config.yaml in {config_dirs}")
 
@@ -254,7 +296,8 @@ class SnakeExecutor(object):
                 self.args.profile = os.environ["SNAKEMAKE_PROFILE"]
 
         if self.args.nocluster:
-            # nocluster means prevent from running using batch/job scheduler
+            # nocluster means prevent from running using batch/job scheduler,
+            # then use special profile "none"
             self.args.profile = "none"
 
         # set targets
@@ -295,11 +338,11 @@ class SnakeExecutor(object):
             args.printshellcmds = self.args.showcmds or self.args.printshellcmds
 
             L.debug("invoking snakemake client")
-            start_time = datetime.datetime.now()
+            start_time = time.monotonic()
             status = cli.args_to_api(args, parser)
-            finish_time = datetime.datetime.now()
+            finish_time = time.monotonic()
 
-            return (status, finish_time - start_time)
+            return (status, datetime.timedelta(seconds=int(finish_time - start_time)))
 
         except Exception as e:
             cli.print_exception(e)
