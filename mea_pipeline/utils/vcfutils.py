@@ -7,14 +7,17 @@ __license__ = "MIT"
 
 import sys
 import pathlib
+import collections
 import numpy as np
+import pandas as pd
+from numba import njit
 from cyvcf2 import VCF, Writer
 from mea_pipeline import cout, cerr, cexit
 
 
 def set_genotypes(variant, indexes, value):
     for idx in indexes:
-        variant.genotypes[indexes] = value
+        variant.genotypes[idx] = value
 
 
 # after setting GT with this function, it is advised to pipe the result to:
@@ -37,16 +40,22 @@ def set_GT(
     set_missing_to_het: bool = False,
     set_missing_to_ref: bool = False,
     set_missing_to_alt: bool = False,
+    set_alt2_to_ref: bool = False,
+    set_alt2_to_alt1: bool = False,
+    set_alt2_to_missing: bool = False,
     set_id: bool = False,
     headers: list = [],
     threads: int = 1,
-):
+) -> None:
 
     # we rely that cyvcf2.Variant().gt_types is (gts012=False):
     #   0 for 0/0
     #   1 for any hets such as 0/1, 0/2, 1/2, etc
     #   2 for ./.
     #   3 for 1/1, 2/2, etc
+
+    # TODO:
+    # - implement set_alt2_*
 
     gt_HOM_REF = 0
     gt_HET = 1
@@ -153,12 +162,15 @@ def set_GT(
 
             # hets are those that are not non-hets
             hets = (~non_hets).nonzero()[0]
+            non_hets = non_hets.nonzero()[0]
 
         else:
             # get non-hets from genotypes / GT fields
 
-            hets = v.gt_types != gt_HET
-            non_hets = (v.gt_types == gt_HOM_REF) | (v.gt_types == gt_HOM_ALT)
+            hets = (v.gt_types != gt_HET).nonzero()[0]
+            non_hets = (
+                (v.gt_types == gt_HOM_REF) | (v.gt_types == gt_HOM_ALT)
+            ).nonzero()[0]
 
         # -- handling hets -- #
 
@@ -185,7 +197,7 @@ def set_GT(
         if minimum_depth >= 0:
             missings = (v.gt_depths < minimum_depth).nonzero()[0]
         else:
-            missings = v.gt_types == gt_MISSING
+            missings = (v.gt_types == gt_MISSING).nonzero()[0]
 
         if set_missing_to_ref:
             set_genotypes(v, missings, genotype_HOM_REF)
@@ -215,6 +227,311 @@ def set_GT(
         with open(logfile, "w") as outlog_f:
             outlog_f.write("\n".join(logs))
         cerr(f"Log file written to {logfile}")
+
+
+# QC-ing VCF based on GT values
+
+
+@njit(fastmath=True)
+def observe_genotypes(
+    gt_types: np.array, sample_metrics: np.array, gt_list: np.array
+) -> None:
+
+    gt_list[0] = gt_list[1] = gt_list[2] = gt_list[3] = 0
+
+    for idx in range(gt_types.shape[0]):
+        gt = gt_types[idx]
+        sample_metrics[idx, gt] += 1
+        gt_list[gt] += 1
+
+
+def generate_QC_metrics(
+    infile: str | pathlib.Path, threads: int = 1, add_fraction: bool = False
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+
+    VariantMetric = collections.namedtuple(
+        "VariantMetric",
+        ["CHROM", "POS", "N_SAMPLES", "HOM_REF", "HETS", "HOM_ALT", "MISSING"],
+    )
+
+    vcf = VCF(infile, gts012=True, threads=threads)
+
+    samples = vcf.samples
+    N_samples = len(samples)
+
+    variant_metrics = []  # this will be list of namedtuple
+
+    # for sample metrics, use gt_types with 0=HOM_REF, 1=HET, 2=HOM_ALT, 3=MISSING (UNKNOWN)
+    # refer to: https://brentp.github.io/cyvcf2/docstrings.html
+    # sample_metrics = pd.DataFrame(dict(SAMPLE=vcf.samples, HOM_REF=0, HETS=0, HOM_ALT=0, MISSING=0))
+    sample_metric_values = np.zeros((N_samples, 4), dtype=np.int32)
+    gt_list = np.zeros(4, dtype=np.int32)
+
+    for v in vcf:
+        # iterate over variants
+        # cerr(f'{v.CHROM}:{v.POS}')
+
+        gt_types = v.gt_types
+
+        observe_genotypes(gt_types, sample_metric_values, gt_list)
+
+        hom_ref, hets, hom_alt, unknown = gt_list
+
+        if (total := hom_ref + hets + hom_alt + unknown) != N_samples:
+            raise ValueError(
+                f"number of allele types {total} does not match number of samples {N_samples}"
+            )
+
+        variant_metrics.append(
+            VariantMetric(v.CHROM, v.POS, N_samples, hom_ref, hets, hom_alt, unknown)
+        )
+
+    sample_metrics = pd.DataFrame(
+        dict(
+            SAMPLE=vcf.samples,
+            HOM_REF=sample_metric_values[:, 0],
+            HETS=sample_metric_values[:, 1],
+            HOM_ALT=sample_metric_values[:, 2],
+            MISSING=sample_metric_values[:, 3],
+        )
+    )
+
+    # convert to dataframe
+    if any(variant_metrics):
+        variant_metrics = pd.DataFrame(variant_metrics)
+    else:
+        variant_metrics = pd.DataFrame(
+            dict(
+                CHROM=[],
+                POS=[],
+                N_SAMPLES=[],
+                HOM_REF=[],
+                HETS=[],
+                HOM_ALT=[],
+                MISSING=[],
+            )
+        )
+
+    sample_metrics["N_VARIANTS"] = (
+        sample_metrics.HOM_REF
+        + sample_metrics.HETS
+        + sample_metrics.HOM_ALT
+        + sample_metrics.MISSING
+    )
+
+    if add_fraction:
+
+        sample_metrics["F_HOM_REF"] = sample_metrics.HOM_REF / sample_metrics.N_VARIANTS
+        sample_metrics["F_HETS"] = sample_metrics.HETS / sample_metrics.N_VARIANTS
+        sample_metrics["F_HOM_ALT"] = sample_metrics.HOM_ALT / sample_metrics.N_VARIANTS
+        sample_metrics["F_MISSING"] = sample_metrics.MISSING / sample_metrics.N_VARIANTS
+
+        variant_metrics["F_HOM_REF"] = (
+            variant_metrics.HOM_REF / variant_metrics.N_SAMPLES
+        )
+        variant_metrics["F_HETS"] = variant_metrics.HETS / variant_metrics.N_SAMPLES
+        variant_metrics["F_HOM_ALT"] = (
+            variant_metrics.HOM_ALT / variant_metrics.N_SAMPLES
+        )
+        variant_metrics["F_MISSING"] = (
+            variant_metrics.MISSING / variant_metrics.N_SAMPLES
+        )
+
+    return variant_metrics, sample_metrics
+
+
+_break_flag = False
+
+
+def _break():
+    global _break_flag
+    _break_flag = True
+
+
+# deduplicate variant positions
+
+
+class SimpleCounter(object):
+
+    def __init__(self, start=0):
+        self.counter = start
+
+    def add(self, value=1):
+        self.counter += value
+
+    def __str__(self):
+        return str(self.counter)
+
+
+def keep_max_AC(duplicated_variants):
+    variant_kept = duplicated_variants[0]
+    for variant in duplicated_variants[1:]:
+        if variant_kept.INFO["AC"] < variant.INFO["AC"]:
+            variant_kept = variant
+    return variant_kept
+
+
+def keep_max_AN(duplicated_variants):
+    variant_kept = duplicated_variants[0]
+    for variant in duplicated_variants[1:]:
+        if variant_kept.INFO["AN"] < variant.INFO["AN"]:
+            variant_kept = variant
+    return variant_kept
+
+
+def deduplicate_variants(
+    infile: str | pathlib.Path,
+    outfile: str | pathlib.Path,
+    strategy: str = "keep-max-AC",
+    headers: list[str] = [],
+):
+
+    vcf = VCF(infile)
+    w = Writer(outfile, vcf)
+
+    for header in headers:
+        w.add_to_header(header)
+
+    dedup_count = SimpleCounter()
+
+    match (strategy):
+
+        case "keep-max-AC":
+            func = keep_max_AC
+
+        case "keep-max-AN":
+            func = keep_max_AN
+
+        case _:
+            raise ValueError("strategy = keep-max-AC | keep-max-AN")
+
+    curr_chrom = None
+    prev_position = -1
+    duplicated_variants = []
+
+    def _check_duplicated_variant():
+        if len(duplicated_variants) == 1:
+            w.write_record(duplicated_variants[0])
+            duplicated_variants.clear()
+
+        else:
+            w.write_record(func(duplicated_variants))
+            duplicated_variants.clear()
+            dedup_count.add()
+
+        for v in vcf:
+
+            if curr_chrom != v.CHROM:
+                curr_chrom = v.CHROM
+                prev_position = -1
+
+            if prev_position > v.start:
+                cexit("[Fatal Error - VCF file is not sorted by position]")
+
+            if prev_position == v.start:
+                duplicated_variants.append(v)
+                continue
+
+            # after this line, we processes the previous line
+            if any(duplicated_variants):
+                _check_duplicated_variant()
+            duplicated_variants.append(v)
+            prev_position = v.start
+
+        if any(duplicated_variants):
+            _check_duplicated_variant()
+
+    cerr(f"[Deduplicated {dedup_count} positions]")
+    vcf.close()
+    w.close()
+
+
+def get_INFO_AC(variant):
+    return variant.INFO["AC"]
+
+
+def get_INFO_AN(duplicated_variants):
+    return variant.INFO["AN"]
+
+
+def process_duplicate_variant(
+    infile: str | pathlib.Path,
+    outfile: str | pathlib.Path,
+    key: str = "AC",
+    action: str = "deduplicate",
+    headers: list[str] = [],
+):
+
+    vcf = VCF(infile)
+    w = Writer(outfile, vcf)
+
+    for header in headers:
+        w.add_to_header(header)
+
+    dedup_count = SimpleCounter()
+
+    match (key):
+
+        case "AC":
+            key_func = lambda v: v.INFO["AC"]
+
+        case "AN":
+            key_func = lambda v: v.INFO["AN"]
+
+        case _:
+            raise ValueError("key = AC | AN")
+
+    match (action):
+        case "deduplicate":
+            action_func = lambda variants, writer: writer.write_record(variants[0])
+
+        case "reorder":
+            action_func = lambda variants, writer: [writer.record(v) for v in variants]
+
+        case _:
+            raise ValueError("action = deduplicate | reorder")
+
+    curr_chrom = None
+    prev_position = -1
+    duplicated_variants = []
+
+    def _process_duplicated_variant():
+        if len(duplicated_variants) == 1:
+            w.write_record(duplicated_variants[0])
+            duplicated_variants.clear()
+
+        else:
+            duplicated_variants.sort(key=func)
+            action_func(duplicated_variants, w)
+            duplicated_variants.clear()
+            dedup_count.add()
+
+    for v in vcf:
+
+        if curr_chrom != v.CHROM:
+            curr_chrom = v.CHROM
+            prev_position = -1
+
+        if prev_position > v.start:
+            cexit("[Fatal Error - VCF file is not sorted by position]")
+
+        if prev_position == v.start:
+            duplicated_variants.append(v)
+            continue
+
+        # after this line, we processes the previous line
+        if any(duplicated_variants):
+            _process_duplicated_variant()
+        duplicated_variants.append(v)
+        prev_position = v.start
+
+    if any(duplicated_variants):
+        _process_duplicated_variant()
+
+    vcf.close()
+    w.close()
+
+    return dedup_count.counter
 
 
 # EOF
