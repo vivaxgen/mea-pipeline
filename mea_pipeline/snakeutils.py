@@ -47,7 +47,7 @@ def set_default_rule_path(module: types.ModuleType):
 def init_argparser(desc: str = "", p: argparse.ArgumentParser | None = None):
     """provide common arguments for snakemake-based cli"""
 
-    p = p or argparse.ArgumentParser(description=str)
+    p = p or argparse.ArgumentParser(description=desc)
     p.arg_dict = {}
 
     # snakemake arguments
