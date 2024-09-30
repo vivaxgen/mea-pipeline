@@ -72,6 +72,24 @@ def init_argparser():
         "biallelic variants",
     )
     p.add_argument(
+        "--set-alt2-to-ref",
+        default=False,
+        action="store_true",
+        help="set other alternate alleles to ref",
+    )
+    p.add_argument(
+        "--set-alt2-to-alt1",
+        default=False,
+        action="store_true",
+        help="set other alternate alleles to first alternate allele",
+    )
+    p.add_argument(
+        "--set-alt2-to-missing",
+        default=False,
+        action="store_true",
+        help="set other alternate allele to missing",
+    )
+    p.add_argument(
         "--set-id",
         default=False,
         action="store_true",
@@ -111,6 +129,9 @@ def vcf_set_GT(args):
         set_missing_to_ref=args.set_missing_to_ref,
         set_missing_to_alt=args.set_missing_to_alt,
         set_missing_to_het=args.set_missing_to_het,
+        set_alt2_to_ref=args.set_alt2_to_ref,
+        set_alt2_to_alt1=args.set_alt2_to_alt1,
+        set_alt2_to_missing=args.set_alt2_to_missing,
         set_id=args.set_id,
         headers=headers,
     )
