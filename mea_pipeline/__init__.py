@@ -20,4 +20,14 @@ def setup_config(d={}):
     return d
 
 
+def gzopen(filename, options="rt"):
+
+    if filename.endswith(".gz"):
+        import gzip
+
+        return gzip.open(filename, options)
+    else:
+        return open(filename, options)
+
+
 # EOF
