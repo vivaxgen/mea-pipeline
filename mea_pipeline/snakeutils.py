@@ -3,7 +3,7 @@
 
 __copyright__ = "(c) 2024, Hidayat Trimarsanto <trimarsanto@gmail.com>"
 __license__ = "MIT"
-__version__ = "2024.08.09.01"
+__version__ = "2024.08.16.01"
 
 # this module provides wrapper to execute Snakemake file from Python code
 
@@ -44,11 +44,18 @@ def set_default_rule_path(module: types.ModuleType):
     __DEFAULT_RULE_PATH__ = pathlib.Path(module.__path__[0]) / "rules"
 
 
-def init_argparser(desc: str = "", p: argparse.ArgumentParser | None = None):
+class ArgumentParser(argparse.ArgumentParser):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.arg_dict = {}
+
+
+def init_argparser(desc: str = "", p: ArgumentParser | None = None):
     """provide common arguments for snakemake-based cli"""
 
-    p = p or argparse.ArgumentParser(description=desc)
-    p.arg_dict = {}
+    p = p or ArgumentParser(description=desc)
+    # p.arg_dict = {}
 
     # snakemake arguments
     p.add_argument(
@@ -194,13 +201,18 @@ class SnakeExecutor(object):
 
         self.args = args
         self.setup_config_func = setup_config_func
-        self.workdir = workdir
+        self.workdir = pathlib.Path(workdir) if workdir else None
         self.show_config_files = show_config_files or args.show_config_files
-        self.env_basedir = env_basedir
+        self.env_basedir = (
+            pathlib.Path(env_basedir) if env_basedir else pathlib.Path.cwd()
+        )
         self.from_module = from_module
-        self.default_config_file = default_config_file
+        self.default_config_file = (
+            pathlib.Path(default_config_file) if default_config_file else None
+        )
 
-        set_default_rule_path(self.from_module)
+        if self.from_module:
+            set_default_rule_path(self.from_module)
 
         # monkey-patch snakemake cli class
         cli_parse_config = cli.parse_config
@@ -351,140 +363,6 @@ class SnakeExecutor(object):
         raise RuntimeError("FATAL ERROR: should not execute this part of code")
 
 
-def run_snakefile(args, config={}, workdir=None, show_configfiles=False):
-    """execute snakefile based on args"""
-
-    L.debug("importing snakemake libraries")
-
-    import snakemake
-    from snakemake import cli
-    import yaml
-
-    # monkey-patch snakemake
-    cli_parse_config = cli.parse_config
-
-    def parse_config(entries):
-        if type(entries) == dict:
-            return entries
-        return cli_parse_config(entries)
-
-    cli.parse_config = parse_config
-    # end of monkey patching
-
-    # getting values from environment
-    L.debug("processing environment variables")
-    INSTALL_BASEDIR = check_NGS_PIPELINE_BASE()
-    ENV_BASEDIR = pathlib.Path(check_NGSENV_BASEDIR())
-    if __envname_FORCE__ in os.environ:
-        args.force = True
-    if __envname_NO_CASCADE__ in os.environ:
-        args.no_config_cascade = True
-
-    # check sanity
-
-    cwd = workdir or pathlib.Path.cwd()
-    if not args.force and not cwd.is_relative_to(ENV_BASEDIR):
-        _cexit(f"ERROR: current directory {cwd} is not relative to {ENV_BASEDIR}")
-
-    configfiles = [pathlib.Path(cf) for cf in reversed(args.config)]
-
-    if args.no_config_cascade:
-        if (configfile := ENV_BASEDIR / "config.yaml").is_file():
-            configfiles.append(configfile)
-    else:
-        L.debug("processing cascading configuration")
-        # for each config directory, check config file existence
-        config_dirs = []
-        config_path = cwd
-        while config_path.is_relative_to(SENV_BASEDIR):
-            config_dirs.append(config_path)
-            configfile = config_path / "config.yaml"
-            if configfile.is_file():
-                configfiles.append(configfile)
-            config_path = config_path.parent
-
-    # get panel configuration and set as base configuration from configs/
-    if args.panel:
-        if args.base_config:
-            _cexit(f"ERROR: cannot use both --panel and --base-config")
-        args.base_config = "configs/" + args.panel + ".yaml"
-
-    if args.base_config:
-        configfiles.append(ENV_BASEDIR / args.base_config)
-
-    # get config file at root of NGSENV_BASEDIR
-    # this config file can be overridden by base/panel/custom config files
-    if (root_configfile := ENV_BASEDIR / "configs" / "config.yaml").is_file():
-        configfiles.append(root_configfile)
-
-    if not any(configfiles):
-        _cexit(f"ERROR: cannot find any config.yaml in {config_dirs}")
-
-    configfiles.reverse()
-
-    if args.showconfigfiles:
-        _cerr("Config files to read:")
-        _cerr(yaml.dump([cf.as_posix() for cf in configfiles]))
-        _cexit("\n")
-
-    # for profile purposes
-
-    if "SNAKEMAKE_PROFILE" in os.environ:
-        if args.profile is None:
-            args.profile = os.environ["SNAKEMAKE_PROFILE"]
-
-    if args.nocluster:
-        # nocluster means prevent from running using batch/job scheduler
-        args.profile = None
-
-    # set targets
-    if type(args.target) != list:
-        targets = [args.target]
-    else:
-        targets = args.target if any(args.target) else ["all"]
-
-    try:
-        # set with --profile first
-        if args.profile:
-            argv = ["--profile", args.profile]
-        else:
-            argv = []
-
-        # XXX: need to modify to use snakemake API
-        L.debug("parsing snakemake arguments")
-        parser, cargs = cli.parse_args(argv)
-
-        # set cargs further from args
-        cargs.snakefile = get_snakefile_path(args.snakefile, from_module=ngs_pipeline)
-        cargs.configfile = configfiles
-        # cargs.config = [f'{k}={v}' for k, v in setup_config(config).items()]
-        cargs.config = setup_config(config)
-        cargs.targets = targets
-
-        # running mode
-        cargs.dryrun = args.dryrun
-        cargs.touch = args.touch
-        cargs.rerun_incomplete = args.rerun
-        cargs.unlock = args.unlock
-
-        # running parameters
-        cargs.cores = args.j
-        cargs.printshellcmds = args.showcmds
-
-        L.debug("invoking snakemake client")
-        start_time = datetime.datetime.now()
-        status = cli.args_to_api(cargs, parser)
-        finish_time = datetime.datetime.now()
-
-        return (status, finish_time - start_time)
-
-    except Exception as e:
-        cli.print_exception(e)
-        sys.exit(1)
-
-    raise RuntimeError("FATAL ERROR: should not execute this part of code")
-
-
 def get_snakefile_path(
     filepath: str | pathlib.Path,
     snakefile_root: pathlib.Path | None = None,
@@ -500,7 +378,9 @@ def get_snakefile_path(
         snakefile_root = pathlib.Path(from_module.__path__[0]) / "rules"
     if snakefile_root is not None:
         return snakefile_root / filepath
-    return __DEFAULT_RULE_PATH__ / filepath
+    if __DEFAULT_RULE_PATH__:
+        return __DEFAULT_RULE_PATH__ / filepath
+    raise ValueError(f"ERR: cannot determine the path for {filepath}")
 
 
 def is_abs_or_rel_path(filepath: str | pathlib.Path):
