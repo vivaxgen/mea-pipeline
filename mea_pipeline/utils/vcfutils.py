@@ -3,14 +3,18 @@
 
 __copyright__ = "(c) 2024, Hidayat Trimarsanto <trimarsanto@gmail.com>"
 __license__ = "MIT"
+__version__ = "2024.08.16.01"
 
 
 import sys
 import pathlib
 import collections
+import typing
+from enum import Enum
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
-from numba import njit
+from numba import njit, jit
 from cyvcf2 import VCF, Writer
 from mea_pipeline import cout, cerr, cexit
 
@@ -18,6 +22,28 @@ from mea_pipeline import cout, cerr, cexit
 def set_genotypes(variant, indexes, value):
     for idx in indexes:
         variant.genotypes[idx] = value
+
+
+# -- the following functions only work for diploid settings
+
+
+def set_alt2_gt(variant, allele):
+    # find positions that have allele index > 1
+    # for idx in range(len(variant.genotypes)):
+    #    if variant.genotypes[idx][0]
+    for idx in range(len(variant.genotypes)):
+        if variant.genotypes[idx][0] > 1:
+            variant.genotypes[idx] = [
+                allele,
+                variant.genotypes[idx][1],
+                variant.genotypes[idx][2],
+            ]
+        if variant.genotypes[idx][1] > 1:
+            variant.genotypes[idx] = [
+                variant.genotypes[idx][0],
+                allele,
+                variant.genotypes[idx][2],
+            ]
 
 
 # after setting GT with this function, it is advised to pipe the result to:
@@ -91,7 +117,11 @@ def set_GT(
 
         if not USE_GT:
 
-            if len(v.ALT) == 1:
+            if len(v.ALT) == 0:
+                # in case no alternate base
+                major_alleles = minor_alleles = minor_depths = np.zeros(AD.shape)
+
+            elif len(v.ALT) == 1:
                 # we have biallelic alleles
 
                 minor_depths = AD.min(axis=1)
@@ -158,7 +188,7 @@ def set_GT(
             # for all that are non-hets, set both alleles to major allele
             for idx in non_hets.nonzero()[0]:
                 allele = major_alleles[idx]
-                v.genotypes[idx] = [allele, allele, False]
+                v.genotypes[idx] = [allele, allele, v.genotypes[idx][-1]]
 
             # hets are those that are not non-hets
             hets = (~non_hets).nonzero()[0]
@@ -210,6 +240,16 @@ def set_GT(
         elif minimum_depth >= 0:
             set_genotypes(v, missings, genotype_MISSING)
 
+        # handling other alternate alleles
+
+        if set_alt2_to_ref:
+            set_alt2_gt(v, allele=0)
+        elif set_alt2_to_alt1:
+            set_alt2_gt(v, allele=1)
+        elif set_alt2_to_missing:
+            set_alt2_gt(v, allele=-1)
+            # XXX: need to check if alleles = ./? or ?/., then set to ./.
+
         # reset genotypes
         v.genotypes = v.genotypes
 
@@ -234,7 +274,7 @@ def set_GT(
 
 @njit(fastmath=True)
 def observe_genotypes(
-    gt_types: np.array, sample_metrics: np.array, gt_list: np.array
+    gt_types: npt.NDArray, sample_metrics: npt.NDArray, gt_list: npt.NDArray
 ) -> None:
 
     gt_list[0] = gt_list[1] = gt_list[2] = gt_list[3] = 0
@@ -450,7 +490,7 @@ def get_INFO_AC(variant):
     return variant.INFO["AC"]
 
 
-def get_INFO_AN(duplicated_variants):
+def get_INFO_AN(variant):
     return variant.INFO["AN"]
 
 
@@ -486,7 +526,9 @@ def process_duplicate_variant(
             action_func = lambda variants, writer: writer.write_record(variants[0])
 
         case "reorder":
-            action_func = lambda variants, writer: [writer.record(v) for v in variants]
+            action_func = lambda variants, writer: [
+                writer.write_record(v) for v in variants
+            ]
 
         case _:
             raise ValueError("action = deduplicate | reorder")
@@ -501,7 +543,8 @@ def process_duplicate_variant(
             duplicated_variants.clear()
 
         else:
-            duplicated_variants.sort(key=func)
+            duplicated_variants.sort(key=key_func, reverse=True)
+            cerr(f"Process: {duplicated_variants[0].POS}")
             action_func(duplicated_variants, w)
             duplicated_variants.clear()
             dedup_count.add()
@@ -532,6 +575,37 @@ def process_duplicate_variant(
     w.close()
 
     return dedup_count.counter
+
+
+def GT_to_index(variant):
+
+    # use GT to convert to alleles, assume all to be homozygotes
+    return variant.gt_types[:, 0]
+
+
+class VCFConverter(object):
+
+    def __init__(self, func: typing.Callable):
+
+        self.func = func
+
+    def convert(
+        self,
+        infile: str | pathlib.Path,
+        threads: int = 1,
+    ):
+
+        vcf = VCF(infile, threads=threads)
+        samples = vcf.samples
+        genotypes = []
+
+        logs = []
+
+        for variant in vcf:
+
+            genotypes.append(self.func(variant))
+
+        return (samples, genotypes)
 
 
 # EOF
