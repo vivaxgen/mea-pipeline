@@ -52,6 +52,9 @@ pip3 install pandas
 pip3 install Pillow
 pip3 install IPython
 pip3 install matplotlib
+pip3 install numba
+pip3 install seaborn
+pip3 install scipy
 
 # pip3 install pycairo
 # we use conda pycairo since pip pycairo does not have complete binary
