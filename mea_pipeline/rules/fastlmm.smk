@@ -1,5 +1,7 @@
 import pathlib
 
+include: "utils.smk"
+
 current_dataset = pathlib.Path.cwd().parent.name + '/' + pathlib.Path.cwd().name
 
 complete_region = config.get('complete_region')
@@ -68,6 +70,7 @@ rule vcf_to_bed:
     input:
         vcf_fn = vcf_file,
         sample_fn = '{pfx}/P@{pheno}/{test_notation}/samples.txt',
+        phenotype_fn = '{pfx}/P@{pheno}/{test_notation}/phenotype.txt',
     output:
         bed_fn = '{pfx}/P@{pheno}/{test_notation}/variants.bed',
         bim_fn = '{pfx}/P@{pheno}/{test_notation}/variants.bim',
@@ -76,17 +79,23 @@ rule vcf_to_bed:
         outprefix = lambda w, output: str(output.bed_fn).removesuffix('.bed'),
         het2miss = '--set-hh-missing' if set_het_as_missing else '',
     shell:
-        'plink2 --out {params.outprefix} --make-bed --allow-extra-chr '
-        ' --threads {threads} '
-        ' {params.het2miss} '
+        'plink2 --out {params.outprefix} --make-bed --allow-extra-chr'
+        ' --threads {threads}'
+        ' {params.het2miss}'
         #'  --geno 0.5'
-        ' --keep {input.sample_fn} '
-        ' --double-id --vcf {input.vcf_fn} && '
-        'spcli $PYS/gen/translate-chrom-name.py '
-        ' --translation-file {chromtranslation_file} '
+        ' --keep {input.sample_fn}'
+        ' --double-id --vcf {input.vcf_fn}'
+        ' && '
+        'spcli $PYS/gen/translate-chrom-name.py'
+        ' --translation-file {chromtranslation_file}'
         ' -o {output.bim_fn} {output.bim_fn}'
+        ' && '
+        'mea-pl tab-modify-fam'
+        ' --phenotype-file {input.phenotype_fn}'
+        ' --outfile {output.fam_fn} {output.fam_fn}'
 
-use rule vcf_to_bed as vcf_to_bed2 with:
+
+rule vcf_to_bed2:
     input:
         vcf_fn = dis_file,
         sample_fn = '{pfx}/P@{pheno}/{vcf_notation}/samples.txt',
@@ -95,6 +104,20 @@ use rule vcf_to_bed as vcf_to_bed2 with:
         bed_fn = '{pfx}/P@{pheno}/{vcf_notation}/distance.bed',
         bim_fn = '{pfx}/P@{pheno}/{vcf_notation}/distance.bim',
         fam_fn = '{pfx}/P@{pheno}/{vcf_notation}/distance.fam',
+    params:
+        outprefix = lambda w, output: str(output.bed_fn).removesuffix('.bed'),
+        het2miss = '--set-hh-missing' if set_het_as_missing else '',
+    shell:
+        'plink2 --out {params.outprefix} --make-bed --allow-extra-chr'
+        ' --threads {threads}'
+        ' {params.het2miss}'
+        #'  --geno 0.5'
+        ' --keep {input.sample_fn}'
+        ' --double-id --vcf {input.vcf_fn}'
+        ' && '
+        'spcli $PYS/gen/translate-chrom-name.py'
+        ' --translation-file {chromtranslation_file}'
+        ' -o {output.bim_fn} {output.bim_fn}'
 
 
 rule prepare_phenotype_and_covars_file:
@@ -112,7 +135,10 @@ rule prepare_phenotype_and_covars_file:
         import numpy as np
 
         # prepare covariate + phenotype
-        covars_df = pd.read_feather(input.covars_fn)
+        if input.covars_fn.endswith('.feather'):
+            covars_df = pd.read_feather(input.covars_fn)
+        else:
+            covars_df = pd.read_table(input.covars_fn)
 
         if 'FWS' in covars_columns:
             # get FWS f
@@ -193,11 +219,12 @@ rule plot_results:
         line2 = lambda w: f'Phenotype: {w.pheno} {"[warped]" if w.lmm_type == "warped" else ""}',
         line3 = f'Covars: {" ".join(covars_columns)}',
     shell:
-        'spcli $PYS/gwas/plot-gwas-results.py --outqq {output.qq} '
-        '  --outmht {output.mht} '
-        '  --add-title-line "{params.line1}" '
-        '  --add-title-line "{params.line2}" '
-        '  --add-title-line "{params.line3}" '
+        '{cli} tab-plot-gwas-results --outqq {output.qq}'
+        '  --outmht {output.mht}'
+        '  --add-title-line "{params.line1}"'
+        '  --add-title-line "{params.line2}"'
+        '  --add-title-line "{params.line3}"'
+        '  --use-bonferroni 0.05'
         '  {input.fn}'
 
 

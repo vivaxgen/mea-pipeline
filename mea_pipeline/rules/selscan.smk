@@ -100,6 +100,35 @@ rule soss_vcf2tped:
         ' {input.vcf}'
 
 
+rule soss_selscan_ihs:
+    threads: 8
+    input:
+        pop1 = "{pfx}/{pop1}-vcfs/{reg}.vcf.gz",
+    output:
+        ihs = "{pfx}/iHS/{pop1}/{reg}.ihs.out"
+    params:
+        flags = config['selscan_xpehh_flags'],
+    shell:
+        "selscan  --ihs  --threads {threads}  {params.flags}"
+        "  --out {wildcards.pfx}/iHS/{wildcards.pop1}/{wildcards.reg}"
+        "  --vcf {input.pop1}  --pmap"    
+
+
+rule soss_selscan_ihs_norm:
+    input:
+        expand("{{pfx}}/iHS/{{pop1}}/{reg}.ihs.out", reg=REGIONS)
+    output:
+        outfile=f'{{pfx}}/iHS/{{pop1}}/{complete_region}.ihs.tsv'
+    params:
+        normfiles = lambda w, input: ' '.join(f'{infile}.100bins.norm' for infile in input)
+    shell:
+        "norm --ihs --files {input}"
+        "  &&  "
+        "mea-pl concat-tables --add-pvalue normihs"
+        "  --add-header 'id,pos,freq,ihh1,ihh0,normihs,crit'"
+        "  -o {output.outfile} {params.normfiles}"
+
+
 rule soss_selscan_xpehh:
     # options to use --wagh
     threads: 16
@@ -184,7 +213,7 @@ rule soss_annotate_signals:
 def get_population_label(population, sample_list_file):
     if (label := config['population_label'].get(population, "")):
         return f'{label} (N={count_file_lines(sample_list_file)})'
-    return ""
+    return f'(N={count_file_lines(sample_list_file)})'
 
 
 rule soss_plot_xpehh:
@@ -221,6 +250,55 @@ use rule soss_plot_xpehh as soss_plot_xpnsl with:
         toplabel = lambda w, input: get_population_label(w.pop1, input.pop1),
         bottomlabel = lambda w, input: get_population_label(w.pop2, input.pop2),
         bedfile = f'--bedfile {fn}' if (fn := config['bedfile_highlight_manhattan']) else '',
+
+
+rule soss_gather_xpehh_xpnsl:
+    threads: 1
+    input:
+        xpehh = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpehh/{complete_region}.xpehh.anno.tsv',
+        xpnsl = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpnsl/{complete_region}.xpnsl.anno.tsv',
+        vcf = f'{{pfx}}/{complete_region}-miss2ref.vcf.gz',
+        idx = f'{{pfx}}/{complete_region}-miss2ref.vcf.gz.tbi',
+        gff = gff_file
+    output:
+        tsv = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpehh-xpnsl.signals.tsv',
+    params:
+        flags = ""
+    shell:
+        "{cli} tab-gather-consensus-signals  -o {output.tsv}"
+        "  --vcf {input.vcf}  --gff {input.gff}  {params.flags}"
+        "  {input.xpehh} {input.xpnsl}"
+
+
+use rule soss_gather_xpehh_xpnsl as soss_combine_xpehh_xpnsl with:
+    output:
+        tsv = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpehh-xpnsl.union.signals.tsv',
+    params:
+        flags = "--mode union"
+
+
+rule soss_concat_xpehh_xpnsl_plots:
+    threads: 1
+    input:
+        xpehh = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpehh/{complete_region}.xpehh.anno.png',
+        xpnsl = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpnsl/{complete_region}.xpnsl.anno.png',
+    output:
+        plot = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpehh-xpnsl.anno.png',
+    shell:
+        "{cli} img-concat-images --resize 0.5  -o {output.plot}"
+        "  {input.xpehh} {input.xpnsl}"
+
+
+def get_soss_target_files(pfx, pop1, pop2, how=None):
+    if how == 'union':
+        return [
+            f"{pfx}/{pop1}-+-{pop2}-xpehh-xpnsl.anno.png",
+            f"{pfx}/{pop1}-+-{pop2}-xpehh-xpnsl.union.signals.tsv",
+        ]
+    return [
+        f"{pfx}/{pop1}-+-{pop2}-xpehh-xpnsl.anno.png",
+        f"{pfx}/{pop1}-+-{pop2}-xpehh-xpnsl.signals.tsv",
+    ]
 
 
 # EOF

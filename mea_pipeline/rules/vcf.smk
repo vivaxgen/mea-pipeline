@@ -98,7 +98,7 @@ rule files:
 
 rule VCF:
     input:
-        out_files(outfiles=['vcfs/{reg}.vcf.gz.tbi' for reg in REGIONS]),
+        out_files(outfiles=[f'vcfs/{reg}.vcf.gz.tbi' for reg in REGIONS]),
         #vcf_files(),
 
 
@@ -307,7 +307,7 @@ ruleorder: flt_variants_samples > flt_variants > flt_samples
 # allele-specific transformation
 
 rule vcf_atomize:
-    # this rule splits complex variants and multi-allele SNVs to individual
+    # this rule decompose complex variants and multi-allele SNVs to individual
     # VCF lines, adding TYPE and F_MISSING to INFO field
     threads: 2
     input:
@@ -323,6 +323,8 @@ rule vcf_atomize:
         " | bcftools +fill-tags -o {output} -- -t TYPE,F_MISSING,AC,AF,AN 2> {log.log2}"
 
 rule vcf_split_snv_join:
+    # this rule split (not decompose) complex variants and multi-allele SNVs to individual
+    # VCF lines, adding TYPE and F_MISSING to INFO field
     threads: 3
     input:
         vcf="{pfx}/vcfs/{reg}.vcf.gz",
@@ -351,6 +353,8 @@ rule vcf_split_snv_join:
 
 
 rule vcf_split_snv_dedup:
+    # this rule split (not decompose) complex variants and multi-allele SNVs to individual
+    # VCF lines
     threads: 3
     input:
         vcf="{pfx}/vcfs/{reg}.vcf.gz",
@@ -461,7 +465,7 @@ rule vcf_split_dedup:
         "bcftools view -o {output.vcf}"
 
 
-ruleorder: vcf_split_snv_join > vcf_split_snv_dedup > vcf_split_dedup > vcf_split > flt_snv > vcf_dedup
+ruleorder: vcf_split_snv_join > vcf_split_snv_dedup > vcf_split_dedup > vcf_split > vcf_join > flt_snv > vcf_dedup
 
 # Minor alelele-based filtering
 

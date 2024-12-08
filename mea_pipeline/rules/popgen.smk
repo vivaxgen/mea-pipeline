@@ -96,6 +96,34 @@ rule plot_njtree_meta_type:
 ruleorder: plot_njtree_meta_type > plot_njtree_meta
 
 
+rule calculate_pcoa:
+    threads: 1
+    input:
+        dist="{pfx}/gendist-{complete_region}/distance-A@{alleletype}.tsv",
+        meta_file=meta_file,
+    output:
+        pcoa="{pfx}/gendist-{complete_region}/pcoa-A@{alleletype}.tsv",
+        txt="{pfx}/gendist-{complete_region}/pcoa-A@{alleletype}.out.txt",
+    params:
+        meta_file = lambda w, input: f'--metafile {input.meta_file}' if input.meta_file else ''
+    shell:
+        "{cli} dis-calculate-pcoa"
+        "  -o {output.pcoa}  --outlog {output.txt}  {params.meta_file}"
+        "  {input.dist}"
+
+rule plot_pcoa:
+    threads: 1
+    input:
+        pcoa="{pfx}/gendist-{complete_region}/pcoa-A@{alleletype}.tsv",
+    output:
+        png="{pfx}/gendist-{complete_region}/pcoa-A@{alleletype}-G@{grp}.png"
+    shell:
+        "{cli} tab-plot-scatter"
+        "  --outplot {output.png} --hue {wildcards.grp}"
+        "  --axis PC1:PC2  --axis PC1:PC3"
+        "  {input.pcoa}"
+
+
 # -- FWS related rules --
 
 
@@ -119,6 +147,23 @@ rule calc_fws:
         "{pfx}/moimix-{complete_region}/fws.tsv",
     shell:
         "{cli} gds-calculate-fws -o {output} {input}"
+
+
+rule group_fws:
+    threads: 1
+    input:
+        table = "{pfx}/moimix-{complete_region}/fws.tsv",
+        meta = meta_file,
+    output:
+        table = "{pfx}/moimix-{complete_region}/fws-G@{grp}.tsv",
+    run:
+        import pandas as pd
+
+        fws_df = pd.read_table(input.table)
+        meta_df = pd.read_table(input.meta)
+        fws_meta_df = fws_df.merge(meta_df)
+
+        fws_meta_df.to_csv(output.table, sep='\t', index=False) 
 
 
 rule plot_fws:
@@ -176,6 +221,30 @@ rule plot_fws_group:
 
 
 ruleorder: plot_fws_group > plot_fws
+
+
+rule fws_ecdf_group:
+    threads: 1
+    input:
+        tsv="{pfx}/moimix-{complete_region}/fws-G@{grp}.tsv",
+    output:
+        plot="{pfx}/moimix-{complete_region}/fws-G@{grp}.ecdf.png"
+    shell:
+        "{cli} plt-distribution -o {output.plot}"
+        "  --kind ecdf  --use-y-axis --hue {wildcards.grp}  --add-hline 0.95  --add-Q1"
+        "  {input.tsv}:FWS"
+
+
+rule fws_cat_group:
+    threads: 1
+    input:
+        tsv="{pfx}/moimix-{complete_region}/fws-G@{grp}.tsv",
+    output:
+        plot="{pfx}/moimix-{complete_region}/fws-G@{grp}.cat.png"
+    shell:
+        "{cli} tab-plot-categories  -o {output.plot}"
+        "  --hue {wildcards.grp}  --add-hline 0.95  --add-means"
+        "  {input.tsv}:FWS"
 
 
 rule prep_FWS:
@@ -247,7 +316,7 @@ rule vcz2hmmibd:
         " {input.vcz}"
 
 
-rule hmmibd:
+checkpoint hmmibd:
     threads: 1
     input:
         tsv="{pfx}/P#{population}-G@{grp}.hmmIBD-input.tsv",
@@ -259,6 +328,59 @@ rule hmmibd:
         "hmmIBD -i {input.tsv} -m 1000 -n 1000 -o {wildcards.pfx}/P#{wildcards.population}-G@{wildcards.grp} 2> {log.log1}"
 
 
+def split_population_notation(wildcards):
+    return wildcards.population_notation.split('-+-')
+    return ['abc', 'def']
+    #return expand("{{pfx}}/P#{population}-G@{{grp}}.hmm_fract.txt", population=['abc', 'def'])
+
+
+rule gather_ibd:
+    localrule: True
+    input:
+        #gather_ibd_input,
+        expand("{{pfx}}/{population}.hmm_fract.txt", population=split_population_notation),
+    output:
+        tsv="{pfx}/{population_notation}.hmm_fract.combined.tsv",
+    run:
+        import pandas as pd
+
+        dfs = []
+        for infile in input:
+            df = pd.read_table(infile)
+            population = infile.removeprefix(wildcards.pfx + '/').removesuffix('.hmm_fract.txt')
+            if (label := config['population_label'].get(population, "")):
+                df['Label'] = label
+            else:
+                raise ValueError(population)
+            dfs.append(df)
+        df = pd.concat(dfs)
+        df.to_csv(output.tsv, sep='\t', index=False)
+
+
+rule ibd_ecdf_group:
+    threads: 1
+    input:
+        tsv="{pfx}/{population_notation}.hmm_fract.combined.tsv",
+    output:
+        plot="{pfx}/{population_notation}.hmm_fract.combined.ecdf.png"
+    shell:
+        "{cli} plt-distribution -o {output.plot}"
+        "  --kind ecdf  --use-y-axis --hue Label  --add-hline 0.5  --add-Q3  --set-ymin -0.05"
+        "  {input.tsv}:fract_sites_IBD"
+
+
+rule ibd_cat_group:
+    localrule: True
+    input:
+        tsv="{pfx}/{population_notation}.hmm_fract.combined.tsv",
+    output:
+        plot="{pfx}/{population_notation}.hmm_fract.combined.cat.png"
+    shell:
+        "{cli} tab-plot-categories  -o {output.plot}"
+        "  --hue Label --add-hline 0.5 --add-means --set-ymin -0.05"
+        "  {input.tsv}:fract_sites_IBD"
+
+
 rule ibd_ecdf:
     threads: 1
     input:
@@ -267,7 +389,7 @@ rule ibd_ecdf:
         img="{pfx}/P#{population}-G@{grp}-T@{plotype}.png",
     shell:
         "{cli} plt-distribution -o {output} --title {wildcards.population}"
-        " --kind {wildcards.plotype} --use-y-axis"
+        " --kind {wildcards.plotype} --use-y-axis  --set-ymin -0.05"
         " {input}:fract_sites_IBD"
 
 
@@ -314,5 +436,49 @@ rule independent_samples:
     shell:
         "{cli} select-independent-samples -o {output} --sample-qc {input.sample_qc} {input.cluster}"
 
+
+rule calc_RoH:
+    threads: 1
+    input:
+        vcf = f"{{pfx}}/{complete_region}.vcf.gz",
+    output:
+        tsv = f"{{pfx}}/generics/RoH.tsv",
+    params:
+        threshold = '--threshold 0.0005',
+        winsize = '--winsize 100',
+    shell:
+        "{cli} vcf-calculate-RoH -o {output.tsv}  {params.threshold}  {params.winsize}  {input.vcf}"
+
+
+use rule group_fws as group_roh with:
+    input:
+        table = "{pfx}/generics/RoH.tsv",
+        meta = meta_file,
+    output:
+        table = "{pfx}/generics/RoH-G@{grp}.tsv",
+
+
+rule roh_ecdf_group:
+    threads: 1
+    input:
+        tsv="{pfx}/generics/RoH-G@{grp}.tsv",
+    output:
+        plot="{pfx}/generics/RoH-G@{grp}.ecdf.png"
+    shell:
+        "{cli} plt-distribution -o {output.plot}"
+        "  --kind ecdf  --use-y-axis --hue {wildcards.grp}"
+        "  {input.tsv}:ROH"
+
+
+rule roh_cat_group:
+    threads: 1
+    input:
+        tsv="{pfx}/generics/RoH-G@{grp}.tsv",
+    output:
+        plot="{pfx}/generics/RoH-G@{grp}.cat.png"
+    shell:
+        "{cli} tab-plot-categories  -o {output.plot}"
+        "  --hue {wildcards.grp}  --add-means"
+        "  {input.tsv}:ROH"
 
 # EOF
