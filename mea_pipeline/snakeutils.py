@@ -3,7 +3,7 @@
 
 __copyright__ = "(c) 2024, Hidayat Trimarsanto <trimarsanto@gmail.com>"
 __license__ = "MIT"
-__version__ = "2024.08.16.01"
+__version__ = "2024.10.07.01"
 
 # this module provides wrapper to execute Snakemake file from Python code
 
@@ -242,6 +242,8 @@ class SnakeExecutor(object):
         from snakemake import cli
 
         cwd = self.workdir or pathlib.Path.cwd()
+        _cerr(f"Current working directory: {cwd}")
+
         if not (force or self.args.force) and not cwd.is_relative_to(self.env_basedir):
             _cexit(
                 f"ERROR: current directory {cwd} is not relative to {self.env_basedir}"
@@ -350,6 +352,7 @@ class SnakeExecutor(object):
             args.printshellcmds = self.args.showcmds or self.args.printshellcmds
 
             L.debug("invoking snakemake client")
+            _cerr(f"Running snakefile: {args.snakefile}")
             start_time = time.monotonic()
             status = cli.args_to_api(args, parser)
             finish_time = time.monotonic()
