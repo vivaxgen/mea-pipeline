@@ -1,0 +1,37 @@
+
+refseq_file: REFSEQ-FILE-NOT-DEFINED
+sample_file: SAMPLE-FILE-NOT-DEFINED
+variant_dir: []
+variant_file: VARIANT-FILE-NOT-DEFINED
+snpEff_config_file: SNPEFF-CONFIG-FILE-NOT-DEFINED
+snpEff_data_dir: SNPEFF-DATA-DIR-NOT-DEFINED
+snpEff_db: SNPEFF-DB-NOT-DEFINED
+gff_file: GFF-FILE-NOT-DEFINED
+meta_file: META-FILE-NOT-DEFINED
+chromtranslation_file: CHROMTRANSLATION-FILE-NOT-DEFINED
+
+POI_slope: 1.01
+mindepth: 5
+
+strict_samples: False
+strict_variants: False
+
+regions:
+  - REGIONS-NOT-DEFINED
+
+complete_region: null
+
+selscan_xpehh_flags: --cutoff 0.05  --unphased
+selscan_xpnsl_flags: --cutoff 0.05  --unphased
+
+mea-pl_tab-annotate-signals: --quantile 0.99  --two-ways --window-size 10000 --minvariants 20
+
+population_label: {}
+
+bedfile_highlight_manhattan: None
+
+covars_file: COVARS-FILE-NOT-DEFINED
+source_dir: SOURCE-DIR-NOT-DEFINED
+out_dir: OUT-DIR-NOT-DEFINED
+
+# EOF
