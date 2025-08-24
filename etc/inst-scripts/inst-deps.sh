@@ -25,16 +25,20 @@ pip3 install openpyxl
 pip3 install matplotlib
 pip3 install seaborn
 
-pip3 install sgkit
+pip3 install sgkit[vcf] bio2zarr
 pip3 install scikit-learn
 pip3 install colorcet
 pip3 install fastlmm
 pip3 install statsmodels
 
-micromamba -y install rpy2 r-optparse r-ape -c conda-forge -c bioconda -c defaults
 micromamba -y install python-igraph -c conda-forge -c bioconda -c defaults
 micromamba -y install plink plink2 -c conda-forge -c bioconda -c defaults
 
+echo "installing R and moimix"
+micromamba -y install rpy2 r-devtools r-biocmanager r-tidyverse r-optparse -c conda-forge -c bioconda
+micromamba -y install r-ape -c conda-forge -c bioconda -c defaults
+micromamba -y install r-matrixmodels r-mcmcpack r-modeltools r-flexmix -c conda-forge -c bioconda
+micromamba -y install bioconductor-seqarray bioconductor-biocparallel bioconductor-biobase bioconductor-seqvartools -c conda-forge -c bioconda
 
 # manual installation of moimix
 Rscript -e "BiocManager::install("bahlolab/moimix", build_vignettes = TRUE)"
