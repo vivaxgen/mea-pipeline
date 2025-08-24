@@ -37,34 +37,14 @@ PYVER="${PYVER:-3.12}"
 SNAKEMAKEVER="${SNAKEMAKEVER:-9}"
 source <(curl -L https://raw.githubusercontent.com/vivaxgen/vvg-base/main/install.sh)
 
-echo "Installing latest htslib tools"
-micromamba -y install "bcftools>=1.18" "samtools>=1.18" -c conda-forge -c bioconda -c defaults
-
-echo "Installing vcftools"
-micromamba -y install vcftools -c conda-forge -c bioconda
-
-echo "Installing required Python modules"
-pip3 install "snakemake<${SNAKEMAKEVER}"
-pip3 install snakemake-executor-plugin-cluster-generic
-pip3 install cyvcf2
-pip3 install pysam
-pip3 install pandas
-pip3 install Pillow
-pip3 install IPython
-pip3 install matplotlib
-
-# pip3 install pycairo
-# we use conda pycairo since pip pycairo does not have complete binary
-# distribution
-micromamba -y install pycairo -c conda-forge
-
-pip3 install argcomplete
-pip3 install openpyxl
-
 echo "Cloning vivaxGEN MEA-Pipeline"
 git clone https://github.com/vivaxgen/mea-pipeline.git ${ENVS_DIR}/mea-pipeline
 ln -sr ${ENVS_DIR}/mea-pipeline/etc/bashrc.d/15-mea-pipeline ${BASHRC_DIR}/
 ln -sr ${ENVS_DIR}/mea-pipeline/etc/bashrc.d/95-prompt-history ${BASHRC_DIR}/
+
+source ${ENVS_DIR}/mea-pipeline/etc/inst-scripts/inst-deps.sh
+
+echo "mea-pipeline" >> ${ETC_DIR}/installed-repo.txt
 
 echo
 echo "vivaxGEN MEA-Pipeline has been successfully installed. "
