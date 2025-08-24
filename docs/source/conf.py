@@ -2,8 +2,8 @@
 
 # -- Project information
 
-project = 'vivaxGEN NGS-Pipeline'
-copyright = '2024, Hidayat Trimarsanto'
+project = 'vivaxGEN MEA-Pipeline'
+copyright = '2024-2025, Hidayat Trimarsanto'
 author = 'Hidayat Trimarsanto <trimarsanto@gmail.com>'
 
 release = '0.1'
