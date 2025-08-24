@@ -30,4 +30,13 @@ def gzopen(filename, options="rt"):
         return open(filename, options)
 
 
+def read_configs(*filenames):
+    import yaml
+
+    d = {}
+    for configfile in filenames:
+        d |= yaml.safe_load(gzopen(configfile))
+    return d
+
+
 # EOF
