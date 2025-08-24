@@ -35,7 +35,7 @@ BASEDIR="${BASEDIR:-./vvg-meapl}"
 uMAMBA_ENVNAME="${uMAMBA_ENVNAME:-mea-pl}"
 PYVER="${PYVER:-3.12}"
 SNAKEMAKEVER="${SNAKEMAKEVER:-9}"
-source <(curl -L https://raw.githubusercontent.com/vivaxgen/vvg-base/main/install.sh)
+source <(curl -L https://raw.githubusercontent.com/vivaxgen/vvg-box/main/install.sh)
 
 echo "Cloning vivaxGEN MEA-Pipeline"
 git clone https://github.com/vivaxgen/mea-pipeline.git ${ENVS_DIR}/mea-pipeline
