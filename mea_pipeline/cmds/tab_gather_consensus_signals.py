@@ -199,6 +199,11 @@ def tab_gather_consensus_signals(args):
             # get segments
             genes = []
             for v in vcf(f"{row.CHROM}:{row.START_POS}-{row.END_POS}"):
+
+                if not v.INFO.get("ANN", None):
+                    segment_df.at[idx, "GENES"] = []
+                    continue
+
                 annotations = [e.split("|") for e in v.INFO["ANN"].split(",")]
                 for ann in annotations:
                     if ann[1] in [
@@ -222,7 +227,7 @@ def tab_gather_consensus_signals(args):
                     ]:
                         pass
                     else:
-                        print(ann[1])
+                        print(f"WARN: unknown type: {ann[1]}")
                 genes = sorted(set(genes))
                 segment_df.at[idx, "GENES"] = genes
 
@@ -234,7 +239,10 @@ def tab_gather_consensus_signals(args):
             for v in vcf(
                 f"{row.CHROM}:{row.MOST_SIGNIFICANT_POS - 1}-{row.MOST_SIGNIFICANT_POS}"
             ):
-                print(v.POS)
+
+                if not v.INFO.get("ANN", None):
+                    continue
+
                 annotations = [e.split("|") for e in v.INFO["ANN"].split(",")]
                 for ann in annotations:
                     if ann[1] in [
@@ -258,7 +266,7 @@ def tab_gather_consensus_signals(args):
                     ]:
                         pass
                     else:
-                        print(ann[1])
+                        print(f"WARN: unknown type: {ann[1]}")
             segment_df.at[idx, "MOST_SIGNIFICANT_GENE"] = "|".join(
                 most_significant_gene
             )
