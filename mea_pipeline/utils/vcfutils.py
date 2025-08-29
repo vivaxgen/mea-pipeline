@@ -383,6 +383,52 @@ def generate_QC_metrics(
 _break_flag = False
 
 
+def count_alleles(alleles):
+    d = {}
+    for allele in alleles:
+        for a in allele.split("/"):
+            if a == ".":
+                continue
+            try:
+                d[a] += 1
+            except KeyError:
+                d[a] = 1
+    return d
+
+
+def calculate_MAF(
+    infile: str | pathlib.Path,
+    threads: int = 1,
+    regions: list[str] = [],
+):
+
+    vcf = VCF(infile, gts012=True, threads=threads)
+    results = []
+
+    for reg in regions:
+
+        # sanity checks
+        if "-" not in reg:
+            tokens = reg.split(":")
+            reg = f"{tokens[0]}:{int(tokens[1])-1}-{tokens[1]}"
+
+        for v in vcf(region=reg):
+            if _break_flag:
+                break
+
+            allele_counts = count_alleles(v.gt_bases)
+            if len(allele_counts) == 1:
+                # only one allele
+                results.append((v.CHROM, v.POS, 0.0))
+            else:
+                counts = sorted(allele_counts.values())
+                minor_count = counts[-2]
+                results.append((v.CHROM, v.POS, minor_count / sum(counts)))
+
+    vcf.close()
+    return results
+
+
 def _break():
     global _break_flag
     _break_flag = True
