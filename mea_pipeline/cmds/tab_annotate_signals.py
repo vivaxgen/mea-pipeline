@@ -4,7 +4,9 @@ from mea_pipeline import cout, cerr, arg_parser
 
 
 def init_argparser():
-    p = arg_parser("Create multiple manhattan plot from columnar data")
+    p = arg_parser(
+        "Generate a manhattan plot table suitable for tab-plot-manhattan from columnar data"
+    )
     p.add_argument("--column", required=True)
     p.add_argument("--neg-log10", default=False, action="store_true")
     p.add_argument("--neg-log", default=False, action="store_true")
@@ -38,10 +40,16 @@ def tab_annotate_signals(args):
                 chrom_translation[tokens[0]] = tokens[1]
 
     cerr(f"Reading {args.infile}")
-    if args.infile.endswith(".feather"):
-        df = pd.read_feather(args.infile)
+    if ":" in args.infile:
+        infile, chr_pos_cols = args.infile.split(":")
+        chr_pos_cols = chr_pos_cols.split(",")
     else:
-        df = pd.read_table(args.infile)
+        infile, chr_pos_cols = args.infile, None
+
+    if infile.endswith(".feather"):
+        df = pd.read_feather(infile)
+    else:
+        df = pd.read_table(infile)
 
     if args.column not in df.columns:
         cerr(f"[ERR - no column named {args.column}]")
@@ -51,6 +59,10 @@ def tab_annotate_signals(args):
         df["CHROM"] = tokens.iloc[:, 0]
         df["POS"] = tokens.iloc[:, 1].astype(int)
 
+    if chr_pos_cols is not None:
+        df["CHROM"] = df[chr_pos_cols[0]]
+        df["POS"] = df[chr_pos_cols[1]]
+
     # translate chromosom
     if chrom_translation:
         df["CHROM_NO"] = [chrom_translation[ctg] for ctg in df["CHROM"]]
@@ -59,14 +71,14 @@ def tab_annotate_signals(args):
 
     if args.neg_log10:
         column = f"-log10({args.column})"
-        df[column] = np.log10(df[args.column])
+        df[column] = -np.log10(df[args.column])
     elif args.neg_log:
         column = f"-log({args.column})"
-        df[column] = np.log(df[args.column])
+        df[column] = -np.log(df[args.column])
     else:
         column = args.column
 
-    mark_significant(df, args.column, args.quantile, args.two_ways)
+    mark_significant(df, column, args.quantile, args.two_ways)
     filter_signals(df, args.minvariants, args.window_size)
 
     df.to_csv(args.outfile, sep="\t", index=False)
