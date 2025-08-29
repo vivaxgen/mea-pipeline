@@ -330,7 +330,6 @@ checkpoint hmmibd:
 
 def split_population_notation(wildcards):
     return wildcards.population_notation.split('-+-')
-    return ['abc', 'def']
     #return expand("{{pfx}}/P#{population}-G@{{grp}}.hmm_fract.txt", population=['abc', 'def'])
 
 
@@ -386,10 +385,10 @@ rule ibd_ecdf:
     input:
         txt="{pfx}/P#{population}-G@{grp}.hmm_fract.txt",
     output:
-        img="{pfx}/P#{population}-G@{grp}-T@{plotype}.png",
+        img="{pfx}/P#{population}-G@{grp}-T@{plottype}.png",
     shell:
         "{cli} plt-distribution -o {output} --title {wildcards.population}"
-        " --kind {wildcards.plotype} --use-y-axis  --set-ymin -0.05"
+        " --kind {wildcards.plottype} --use-y-axis  --set-ymin -0.05"
         " {input}:fract_sites_IBD"
 
 
