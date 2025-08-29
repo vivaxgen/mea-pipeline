@@ -8,6 +8,7 @@ vcf = path("vcf.smk")
 popgen = path("popgen.smk")
 selscan = path("selscan.smk")
 fastlmm = path("fastlmm.smk")
+hapqtl = path("hapqtl.smk")
 
 
 # EOF
