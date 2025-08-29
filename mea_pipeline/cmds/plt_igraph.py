@@ -146,11 +146,14 @@ def plt_igraph(args):
 
         # IPython.embed()
         # set layout
-        cols = 3
+        cols = 3 if len(graphs) >= 3 else len(graphs)
         rows = math.ceil(len(thresholds) / cols)
         fig, axes = plt.subplots(rows, cols)
         if rows == 1:
-            axes = np.array([axes])
+            if cols == 1:
+                axes = np.array([[axes]])
+            else:
+                axes = np.array([axes])
         idx = 0
 
         cerr("Generating plot(s)...")
