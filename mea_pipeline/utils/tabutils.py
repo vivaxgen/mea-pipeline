@@ -60,6 +60,12 @@ def read_table(infile, func, **kwargs):
 
 
 def join_metafile(samples, metafile, data=None, start_col=0, percenttag=False):
+    """
+    metafile: a string containing the filename and the columns to be joined
+    data: dataframe containing additional data to be joined
+    start_col: the starting column index of the additional data to be joined
+    percenttag: if True, the column names will be prepended with '%'
+    """
     tokens = metafile.split(":")
     meta_df = read_file(tokens[0])
     if len(tokens) == 1:
