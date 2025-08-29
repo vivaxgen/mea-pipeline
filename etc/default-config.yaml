@@ -28,7 +28,7 @@ mea-pl_tab-annotate-signals: --quantile 0.99  --two-ways --window-size 10000 --m
 
 population_label: {}
 
-bedfile_highlight_manhattan: None
+bedfile_highlight_manhattan:
 
 covars_file: COVARS-FILE-NOT-DEFINED
 source_dir: SOURCE-DIR-NOT-DEFINED
