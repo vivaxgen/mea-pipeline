@@ -10,11 +10,16 @@ from mea_pipeline import arg_parser, cerr
 
 def init_argparser():
     p = arg_parser("vcf-plot-phenotype")
-    p.add_argument("--phenotype-file")
+    p.add_argument(
+        "--phenotype-file",
+        help="a TSV file containing phenotype data, "
+        "use the filename:sample_column,phenotype_column to specify columns to use",
+    )
     p.add_argument(
         "--size-file",
         default=None,
-        help="a TSV file containing normalized values for representing dot sizes",
+        help="a TSV file containing normalized values for representing dot sizes, "
+        "use the filename:column specification to specify the column to use",
     )
     p.add_argument("--threads", type=int, default=1)
     p.add_argument(
@@ -23,8 +28,18 @@ def init_argparser():
         default=None,
         help="comma-separated chromosom position, in the format of CHROM:POS or CHROM:START-END",
     )
-    p.add_argument("-T", "--target-file", default=None)
-    p.add_argument("--contig-pattern", default=None)
+    p.add_argument(
+        "-T",
+        "--target-file",
+        default=None,
+        help="a TSV file containing target positions, "
+        "use the filename:column specification to specify the column to use",
+    )
+    p.add_argument(
+        "--contig-pattern",
+        default=None,
+        help="string pattern for contig name after chromosome number, eg. 'PvP01_{:02}_v2 ",
+    )
     p.add_argument("--count", type=int, default=10)
     p.add_argument("--outprefix", default="outplot")
     p.add_argument("infile", help="VCF file")
@@ -112,7 +127,8 @@ def vcf_plot_phenotype(args):
             plot_df = pd.DataFrame(
                 {
                     "sample": pheno_df.iloc[:, 0],
-                    "genotype": np.array(["0/0", "0/1", "1/1", "./."])[v.gt_types],
+                    # "genotype": np.array(["0/0", "0/1", "1/1", "./."])[v.gt_types],
+                    "genotype": v.gt_bases,
                     pheno_column: pheno_df.loc[:, pheno_column],
                     "alt_ratio": v.gt_alt_depths / (v.gt_alt_depths + v.gt_ref_depths),
                 }
@@ -130,13 +146,27 @@ def vcf_plot_phenotype(args):
                 hue="alt_ratio",
             )
             fg.ax.set_yscale("log")
+
+            for i, label in enumerate(plot_df.genotype.unique()):
+                data = plot_df.loc[plot_df.genotype == label][pheno_column]
+                mean = data.mean()
+                q1, q2, q3 = data.quantile([0.25, 0.50, 0.75])
+                for x, c in zip([mean, q2, q1, q3], ["black", "red", "green", "green"]):
+                    fg.ax.plot([i - 0.2, i + 0.2], [x, x], color=c, ls="--", lw=0.5)
+
+            if plot_df.genotype.str.len().max() > 8:
+                plt.xticks(rotation=60, ha="right", rotation_mode="anchor")
+
             plt.title(f"{v.CHROM}:{v.POS}")
             plt.tight_layout()
 
             if args.outprefix:
                 outplot = f"{args.outprefix}{counter:02}-{v.CHROM}_{v.POS}.png"
+                outtable = f"{args.outprefix}{counter:02}-{v.CHROM}_{v.POS}.tsv"
+                plot_df.to_csv(outtable, sep="\t", index=False)
+                cerr(f"Saving table to {outtable} with {len(plot_df)} data points")
                 cerr(f"Saving plot to {outplot}")
-                plt.savefig(outplot)
+                plt.savefig(outplot, dpi=300)
                 plt.close()
 
         counter += 1
