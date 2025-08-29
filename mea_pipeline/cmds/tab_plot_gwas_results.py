@@ -30,7 +30,7 @@ def mhtplot(results_df, outplot, columns, title=None, pvalue_line=None):
     import fastlmm.util.util as flutil
     import matplotlib.pyplot as plt
 
-    plt.rcParams["figure.figsize"] = (10.0, 8.0)
+    plt.rcParams["figure.figsize"] = (16.0, 8.0)
     # bonferroni_pvalue = 0.05 / len(results_df)
     flutil.manhattan_plot(
         results_df[columns].values,
@@ -39,6 +39,7 @@ def mhtplot(results_df, outplot, columns, title=None, pvalue_line=None):
     )
     if title:
         plt.title(title, loc="left")
+    plt.tight_layout()
     plt.savefig(outplot, dpi=600)
     plt.close()
 
@@ -119,6 +120,9 @@ def plot_gwas_results(args):
         _, pvals_holm, _, _ = multipletests(pvals, alpha=args.use_holm, method="holm")
         df[columns[2]] = pvals_holm
         pvalue_line = args.use_holm
+
+    else:
+        pvalue_line = None
 
     mhtplot(df, args.outmht, columns, pvalue_line=pvalue_line, title=title)
 
