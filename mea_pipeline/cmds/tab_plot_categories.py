@@ -13,6 +13,11 @@ def init_argparser():
     p.add_argument("--add-means", default=False, action="store_true")
     p.add_argument("--set-ymin", default=None, type=float)
 
+    p.add_argument(
+        "--set-label",
+        default=None,
+        help="set label for x-axis if the data is a single population",
+    )
     p.add_argument("--hue", default=None, help="column to use for grouping")
     p.add_argument("--size", default=5, type=float)
     p.add_argument("--drop-zero", default=False, action="store_true")
@@ -62,6 +67,9 @@ def tab_plot_categories(args):
 
     cerr(f"Generating distribution plot with {df.shape[0]} data points")
 
+    if args.set_label and args.hue:
+        cexit("ERROR: --set-label and --hue are mutually exclusive")
+
     if args.hue:
         df.sort_values(by=args.hue, inplace=True)
 
@@ -70,7 +78,9 @@ def tab_plot_categories(args):
         x=args.hue,
         hue=args.hue,
         y=column,
-        palette=sns.color_palette(color_palettes["xgfs_normal12"]),
+        palette=(
+            sns.color_palette(color_palettes["xgfs_normal12"]) if args.hue else None
+        ),
         legend=False,
         size=args.size,
     )
@@ -82,16 +92,25 @@ def tab_plot_categories(args):
 
         # for ax in fg.axes.flat:
         ax = fg.ax
-        for i, hue in enumerate(df[args.hue].unique()):
-            mean = df.loc[df[args.hue] == hue][column].mean()
-            ax.plot([i - 0.2, i + 0.2], [mean, mean], color="black", ls="--", lw=0.5)
+        if args.hue:
+            for i, hue in enumerate(df[args.hue].unique()):
+                mean = df.loc[df[args.hue] == hue][column].mean()
+                ax.plot(
+                    [i - 0.2, i + 0.2], [mean, mean], color="black", ls="--", lw=0.5
+                )
+        else:
+            mean = df[column].mean()
+            ax.axhline(mean, color="black", ls="--", lw=0.5)
 
     if args.add_hline:
         add_hline(fg.ax, args.add_hline, str(args.add_hline))
         fg.ax.set_ylim(ymax=1.0)
 
     if args.set_ymin:
-        ax.set_ylim(ymin=args.set_ymin)
+        fg.ax.set_ylim(ymin=args.set_ymin)
+
+    if args.set_label:
+        fg.ax.set_xlabel(args.set_label)
 
     plt.xticks(rotation=60, ha="right", rotation_mode="anchor")
     plt.tight_layout()
