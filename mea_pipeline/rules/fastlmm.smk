@@ -24,6 +24,8 @@ use_genetic_relation_matrix = config['use_genetic_relation_matrix']
 
 
 # TODO:
+# - handle missing values in phenotype and covariate files, currently set to "" (empty string)
+#   see prepare_phenotype_and_covars_file rule
 # - use hmmIBD to calculate proportion of shared-IBD, convert it to
 #   similarity matrix (eg. 1 - shared_proportion), and save it as
 #   .npz file for consumption of K0 argument of single_snp()
@@ -86,7 +88,7 @@ rule vcf_to_bed:
         ' --keep {input.sample_fn}'
         ' --double-id --vcf {input.vcf_fn}'
         ' && '
-        'spcli $PYS/gen/translate-chrom-name.py'
+        'mea-pl translate-chrom-name'
         ' --translation-file {chromtranslation_file}'
         ' -o {output.bim_fn} {output.bim_fn}'
         ' && '
@@ -115,7 +117,7 @@ rule vcf_to_bed2:
         ' --keep {input.sample_fn}'
         ' --double-id --vcf {input.vcf_fn}'
         ' && '
-        'spcli $PYS/gen/translate-chrom-name.py'
+        'mea-pl translate-chrom-name'
         ' --translation-file {chromtranslation_file}'
         ' -o {output.bim_fn} {output.bim_fn}'
 
@@ -156,11 +158,13 @@ rule prepare_phenotype_and_covars_file:
 
         # write phenotype
         phenotype_df = merged_df.loc[:, ['WGSID', 'WGSID', wildcards.pheno]]
-        phenotype_df.to_csv(output.phenotype_fn, header=False, index=False, sep='\t')
+        phenotype_df.to_csv(output.phenotype_fn, header=False, index=False, sep='\t', na_rep='')
 
         # write covariates
+        if any(covars_columns):
+            print('Preparing covariates: ', covars_columns)
         covariates_df = merged_df.loc[:, ['WGSID', 'WGSID'] + covars_columns]
-        covariates_df.to_csv(output.covars_fn, header=False, index=False, sep='\t')
+        covariates_df.to_csv(output.covars_fn, header=False, index=False, sep='\t', na_rep='')
 
         # write samples
         #with open(output.sample_fn, 'wt') as sample_out:
@@ -201,7 +205,7 @@ rule run_fastlmm:
         covars = (lambda w, input: f'--covars-file {input.covars_fn}') if any(covars_columns) else '',
         similarity_file = (lambda w, input: f'--similarity-file {input.dist_fn}') if use_genetic_relation_matrix else '',
     shell:
-        "spcli $PYS/gwas/run-fastlmm.py --phenotype-file {input.phenotype_fn} "
+        "{cli} gwas-run-fastlmm --phenotype-file {input.phenotype_fn} "
         " {params.covars} "
         " {params.similarity_file} "
         " -o {output.fn} {input.ped_fn}"
