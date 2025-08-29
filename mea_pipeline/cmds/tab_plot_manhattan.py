@@ -1,6 +1,6 @@
 #!/usr/bin/env mea-pl
 
-from mea_pipeline import cout, cerr, arg_parser
+from mea_pipeline import cout, cerr, cexit, arg_parser
 
 
 def init_argparser():
@@ -9,9 +9,15 @@ def init_argparser():
     p.add_argument("--title", default=[], action="append")
     p.add_argument("--dpi", type=int, default=600)
     p.add_argument("--dotsize", type=float, default=0.25)
+    p.add_argument("--size-column", default=None)
+    p.add_argument(
+        "--size-factor", type=float, default=1.0, help="Size factor for dotsize"
+    )
     p.add_argument("--autoyscale", default=False, action="store_true")
     p.add_argument("--hline", default=False, action="store_true")
     p.add_argument("--bedfile", default=None, help="bed file to use as highlight")
+    p.add_argument("--bed-label-top", default=False, action="store_true")
+    p.add_argument("--bed-label-bottom", default=False, action="store_true")
     p.add_argument("--y-label", default=None)
     p.add_argument("--toptext", default=None)
     p.add_argument("--bottomtext", default=None)
@@ -28,11 +34,23 @@ def tab_plot_manhattan(args):
     import numpy as np
     from matplotlib import pyplot as plt
 
-    cerr(f"Reading {args.infile}")
-    if args.infile.endswith(".feather"):
-        df = pd.read_feather(args.infile)
+    columns = None
+    infile = args.infile
+    if ":" in args.infile:
+        infile, columns = args.infile.split(":")
+        columns = columns.split(",")
+        if len(columns) != 2:
+            cexit("Column must be 2 columns")
+
+    cerr(f"Reading {infile}")
+    if infile.endswith(".feather"):
+        df = pd.read_feather(infile)
     else:
-        df = pd.read_table(args.infile)
+        df = pd.read_table(infile)
+
+    if columns:
+        df["CHROM"] = df[columns[0]]
+        df["POS"] = df[columns[1]]
 
     df.sort_values(by=["CHROM", "POS"])
     # df['-log10 PValue'] = - np.log10(df['PValue'])
@@ -45,11 +63,14 @@ def tab_plot_manhattan(args):
     ax = manhattan_plot(
         df,
         args.column,
+        size_column=args.size_column,
+        size_factor=args.size_factor,
         hline=args.hline,
         y_label=args.y_label,
         toptext=args.toptext,
         bottomtext=args.bottomtext,
         highlight=bed,
+        highlight_pos="bottom" if args.bed_label_bottom else None,
     )
     plt.tight_layout()
     plt.savefig(args.outfile, dpi=600)
@@ -87,27 +108,36 @@ unused = [
 ]
 
 
-def plot_scatter(data, column):
+def plot_scatter(data, column, size_column=None, size_factor=1.0):
 
     from matplotlib import pyplot as plt
+
+    if size_column is None:
+        size = ((data.loc[:, column] ** 2).abs().clip(lower=0.25) * size_factor,)
+    else:
+        size = data.loc[:, size_column] * size_factor
 
     paths = plt.scatter(
         x=data.index,
         y=data.loc[:, column],
         c=data["COLOR"],
-        s=(data.loc[:, column] ** 2).abs().clip(lower=0.25),
+        s=size,
+        # s=(data.loc[:, column] ** 2).abs().clip(lower=0.25),
     )
 
 
 def manhattan_plot(
     data,
     column,
+    size_column=None,
+    size_factor=1.0,
     y_label=None,
     hline: bool | float = False,
     dpi=300,
     toptext=None,
     bottomtext=None,
     highlight: list | None = None,
+    highlight_pos=None,
 ):
     """data=[CHROM, POS, value]"""
 
@@ -145,12 +175,17 @@ def manhattan_plot(
                 (data.CHROM == row[0]) & (data.POS > row[1]) & (data.POS < row[2]), :
             ]
             if len(regions) > 0:
-                plt.axvspan(regions.index[0], regions.index[1], color="lightgrey")
-            highlight_text.append((row[3], regions.index[0]))
+                if len(regions) > 1:
+                    start = regions.index[0]
+                    end = regions.index[1]
+                else:
+                    start = end = regions.index[0]
+                plt.axvspan(start, end, color="lightgrey")
+                highlight_text.append((row[3], start))
 
     #  do double coloring, non-signal first then signals so that signals would above non-signals
-    plot_scatter(data.loc[data.SIGNAL == 0, :], column)
-    plot_scatter(data.loc[data.SIGNAL == 1, :], column)
+    plot_scatter(data.loc[data.SIGNAL == 0, :], column, size_column, size_factor)
+    plot_scatter(data.loc[data.SIGNAL == 1, :], column, size_column, size_factor)
 
     if hline is True:
         if "UPPER_THRESHOLD" in data.columns:
@@ -171,20 +206,33 @@ def manhattan_plot(
             str(chrom),
             horizontalalignment="center",
             verticalalignment="center",
+            fontweight="bold",
         )
 
-    for text, hpos in highlight_text:
-        plt.text(
-            hpos,
-            data[column].min() - 0.2,
-            text,
-            fontsize="xx-small",
-            fontstretch="ultra-condensed",
-            rotation="vertical",
-            verticalalignment="baseline",
-            horizontalalignment="right",
-            color="grey",
+    if highlight_pos == "bottom":
+        labels = [i[0] for i in highlight_text]
+        plt.xticks(
+            [i[1] for i in highlight_text],
+            labels,
+            rotation=45,
+            ha="right",
+            rotation_mode="anchor",
         )
+
+    else:
+        plt.xticks([])
+        for text, hpos in highlight_text:
+            plt.text(
+                hpos,
+                data[column].min() - 0.2,
+                text,
+                fontsize="xx-small",
+                fontstretch="ultra-condensed",
+                rotation="vertical",
+                verticalalignment="baseline",
+                horizontalalignment="right",
+                color="grey",
+            )
 
     # inner legend
     if toptext:
@@ -204,7 +252,6 @@ def manhattan_plot(
             verticalalignment="center",
         )
     plt.ylabel(y_label or column)
-    plt.xticks([])
 
     return
 
