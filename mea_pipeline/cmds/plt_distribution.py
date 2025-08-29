@@ -95,7 +95,9 @@ def displot(args):
             y=column,
             kind=args.kind,
             hue=args.hue,
-            palette=sns.color_palette(color_palettes["xgfs_normal12"]),
+            palette=(
+                sns.color_palette(color_palettes["xgfs_normal12"]) if args.hue else None
+            ),
         )
     else:
         fg = sns.displot(
@@ -103,7 +105,9 @@ def displot(args):
             x=column,
             kind=args.kind,
             hue=args.hue,
-            palette=sns.color_palette(color_palettes["xgfs_normal12"]),
+            palette=(
+                sns.color_palette(color_palettes["xgfs_normal12"]) if args.hue else None
+            ),
         )
     ax = fg.ax
     if args.kind == "ecdf":
@@ -122,7 +126,8 @@ def displot(args):
         ax.set_ylim(ymin=args.set_ymin)
     if args.title:
         ax.set(title=args.title)
-    sns.move_legend(fg, "upper left", bbox_to_anchor=(0.5, 0))
+    if args.hue:
+        sns.move_legend(fg, "upper left", bbox_to_anchor=(0.5, 0))
     plt.tight_layout()
 
     plt.savefig(
