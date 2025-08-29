@@ -210,6 +210,22 @@ rule soss_annotate_signals:
         "  {input.tsv}"
 
 
+rule soss_signal_table_xpehh:
+    threads: 1
+    input:
+        tsv = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpehh/{complete_region}.xpehh.anno.tsv',
+        vcf = f'{{pfx}}/{complete_region}-miss2ref.vcf.gz',
+        idx = f'{{pfx}}/{complete_region}-miss2ref.vcf.gz.tbi',
+        gff = gff_file
+    output:
+        tsv = f'{{pfx}}/{{pop1}}-+-{{pop2}}-xpehh/{complete_region}.xpehh.signals.tsv'
+    params:
+        flags = ""
+    shell:
+        "{cli} tab-gather-consensus-signals  -o {output.tsv}"
+        "  --vcf {input.vcf}  --gff {gff_file}  {params.flags}"
+        "  {input.tsv}"
+
 def get_population_label(population, sample_list_file):
     if (label := config['population_label'].get(population, "")):
         return f'{label} (N={count_file_lines(sample_list_file)})'
