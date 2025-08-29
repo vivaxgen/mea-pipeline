@@ -292,7 +292,6 @@ rule flt_variants:
 
 use rule flt_variants as flt_variants_fn with:
     input:
-    input:
         vcf="{pfx}/vcfs/{reg}.vcf.gz",
         vcf_idx="{pfx}/vcfs/{reg}.vcf.gz.tbi",
         region_file="{fn}",
@@ -380,6 +379,8 @@ rule vcf_split_snv_dedup:
 
 
 rule vcf_split:
+    # this rule split (not decompose) complex variants and multi-allele SNVs to individual
+    # VCF lines, adding TYPE and F_MISSING to INFO field
     threads: 2
     input:
         vcf="{pfx}/vcfs/{reg}.vcf.gz",
@@ -466,6 +467,30 @@ rule vcf_split_dedup:
 
 
 ruleorder: vcf_split_snv_join > vcf_split_snv_dedup > vcf_split_dedup > vcf_split > vcf_join > flt_snv > vcf_dedup
+
+
+rule flt_CDSV:
+    threads: 1
+    input:
+        vcf = "{pfx}/vcfs/{reg}.vcf.gz",
+    output:
+        vcf = "{pfx}-CDSV/vcfs/{reg}.vcf.gz",
+    params:
+        type_spec = 'INFO/ANN~"missense_variant" || INFO/ANN~"stop_gained" || INFO/ANN~"stop_lost" || INFO/ANN~"start_lost" || INFO/ANN~"frameshift_variant" || INFO/ANN~"inframe_insertion" || INFO/ANN~"inframe_deletion" || INFO/ANN~"disruptive_inframe_deletion" || INFO/ANN~"disruptive_inframe_insertion" || INFO/ANN~"conservative_inframe_insertion" || INFO/ANN~"conservative_inframe_deletion" || INFO/ANN~"synonymous_variant"',
+    shell:
+        "bcftools view -i '{params.type_spec}' -o {output.vcf} {input.vcf}"
+
+
+rule flt_CDS:
+    threads: 1
+    input:
+        vcf = "{pfx}/vcfs/{reg}.vcf.gz",
+        bed = gff_file + '-CDS',
+    output:
+        vcf = "{pfx}-CDS/vcfs/{reg}.vcf.gz",
+    shell:
+        "bcftools view -T {input.bed} -o {output.vcf} {input.vcf}"
+
 
 # Minor alelele-based filtering
 
@@ -680,7 +705,8 @@ use rule plot_complete_QC_png as plot_complete_QC_pdf with:
 
 
 rule gather_sample_QC_png:
-    localrule: True
+    threads: 1
+    #localrule: True
     input:
         expand("{{pfx}}/QC/{reg}-samples.tsv", reg=REGIONS),
     output:
