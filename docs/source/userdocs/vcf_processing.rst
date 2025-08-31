@@ -8,7 +8,7 @@ Query Notation
 --------------
 
 .. list-table:: Query Notation
-    :widths: 25 75
+    :widths: 30 70
     :header-rows: 1
     
     * - Notation
