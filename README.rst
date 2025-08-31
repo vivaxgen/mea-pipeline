@@ -1,7 +1,9 @@
 vivaxGEN MEA-Pipeline
 =====================
 
-The vivaxGEN Molecular Epidemiology Analytics (MEA) Pipeline contains scripts, Snakemake workflow rules and tools to perform population genetics and other genotype-based analysis.
+The vivaxGEN Molecular Epidemiology Analytics (MEA) Pipeline provides scripts, Snakemake workflow
+rules and tools to perform VCF processing, population genetics and association study analysis.
+
 
 Installation
 ------------
@@ -9,4 +11,12 @@ Installation
 To install, execute the following command::
 
 	"${SHELL}" <(curl -L https://raw.githubusercontent.com/vivaxgen/mea-pipeline/main/install.sh)
+
+
+Documentation
+-------------
+
+The documentation for the vivaxGEN MEA-Pipeline can be found at: hhttps://vivaxgen-mea-pipeline.readthedocs.io/en/latest/
+
+
 
