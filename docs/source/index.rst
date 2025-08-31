@@ -5,12 +5,14 @@ vivaxGEN MEA-Pipeline Documentation
 The MEA-Pipeline provides set of tools and Snakemake workflow for VCF processing,
 population genetics and GWAS analysis.
 
+
 Installation
 ------------
 
 To install, execute the following command::
 
 	"${SHELL}" <(curl -L https://raw.githubusercontent.com/vivaxgen/mea-pipeline/main/install.sh)
+
 
 Examples
 --------
@@ -61,6 +63,16 @@ A minimal configuration file, using PvP01_v2 reference genome, is shown here:
      - PvP01_12_v2
      - PvP01_13_v2
      - PvP01_14_v2
+
+
+Updating the Pipeline
+---------------------
+
+To update the pipeline, use the following command::
+
+   $ $VVGBIN/update-box
+
+The above command will update the pipeline and all necessary dependencies.
 
 
 .. toctree::
