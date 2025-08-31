@@ -16,7 +16,7 @@ To install, execute the following command::
 Documentation
 -------------
 
-The documentation for the vivaxGEN MEA-Pipeline can be found at: hhttps://vivaxgen-mea-pipeline.readthedocs.io/en/latest/
-
+The documentation for the vivaxGEN MEA-Pipeline can be found at
+`main documentation site <https://vivaxgen-mea-pipeline.readthedocs.io/en/latest/>`_
 
 
