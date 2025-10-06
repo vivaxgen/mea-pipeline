@@ -41,7 +41,7 @@ micromamba -y install r-matrixmodels r-mcmcpack r-modeltools r-flexmix -c conda-
 micromamba -y install bioconductor-seqarray bioconductor-biocparallel bioconductor-biobase bioconductor-seqvartools -c conda-forge -c bioconda
 
 # manual installation of moimix
-Rscript -e "BiocManager::install("bahlolab/moimix", build_vignettes = TRUE)"
+Rscript -e "BiocManager::install('bahlolab/moimix', build_vignettes = TRUE)"
 
 # manual installation of hmmIBD
 
