@@ -113,7 +113,7 @@ def set_GT(
 
     for v in vcf:
 
-        AD = v.format("AD")
+        AD = v.format("AD").clip(min=0) # handle ".,." returned as negative number 
 
         if not USE_GT:
 
